@@ -38,11 +38,10 @@
 #include "lib/Transforms/ElementwiseToAffine/ElementwiseToAffine.h"
 #include "lib/Transforms/ForwardStoreToLoad/ForwardStoreToLoad.h"
 #include "lib/Transforms/FullLoopUnroll/FullLoopUnroll.h"
+#include "lib/Transforms/MergeLUTs/MergeLUTs.h"
 #include "lib/Transforms/Secretize/Passes.h"
 #include "lib/Transforms/StraightLineVectorizer/StraightLineVectorizer.h"
 #include "lib/Transforms/UnusedMemRef/UnusedMemRef.h"
-#include "llvm/include/llvm/Support/CommandLine.h"  // from @llvm-project
-#include "llvm/include/llvm/Support/raw_ostream.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/AffineToStandard/AffineToStandard.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/ArithToLLVM/ArithToLLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/BufferizationToMemRef/BufferizationToMemRef.h"  // from @llvm-project
@@ -76,6 +75,8 @@
 #include "mlir/include/mlir/Pass/PassRegistry.h"           // from @llvm-project
 #include "mlir/include/mlir/Tools/mlir-opt/MlirOptMain.h"  // from @llvm-project
 #include "mlir/include/mlir/Transforms/Passes.h"           // from @llvm-project
+#include "llvm/include/llvm/Support/CommandLine.h"  // from @llvm-project
+#include "llvm/include/llvm/Support/raw_ostream.h"  // from @llvm-project
 
 #ifndef HEIR_NO_YOSYS
 #include "lib/Transforms/YosysOptimizer/YosysOptimizer.h"
@@ -413,6 +414,9 @@ void tosaToBooleanFpgaTfhePipeline(const std::string &yosysFilesPath,
         pm.addPass(createCanonicalizerPass());
         pm.addPass(createCSEPass());
         pm.addPass(createSCCPPass());
+
+        pm.addPass(createMergeLUTs());
+
       });
 }
 #endif
@@ -505,6 +509,7 @@ int main(int argc, char **argv) {
   registerForwardStoreToLoadPasses();
   registerStraightLineVectorizerPasses();
   registerUnusedMemRefPasses();
+  registerMergeLUTsPasses();
   // Register yosys optimizer pipeline if configured.
 #ifndef HEIR_NO_YOSYS
 #ifndef HEIR_ABC_BINARY
