@@ -2,6 +2,7 @@
 
 #include "lib/Dialect/Comb/IR/CombOps.h"
 #include "lib/Graph/Graph.h"
+#include "lib/Transforms/MergeLUTs/LutMergingUtils.h"
 #include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
@@ -80,25 +81,45 @@ struct MergeLUTs : public impl::MergeLUTsBase<MergeLUTs> {
                     llvm::dbgs() << "- user input " << input << "\n";
             });
 
-            
-
             builder.setInsertionPointAfter(user);
 
             SetVector<Value> userInputs;
-            for (auto input : llvm::cast<comb::TruthTableOp>(user).getLookupTableInputs())
+            for (auto input : castUser.getLookupTableInputs())
             {
                 if (input.getDefiningOp() == lutToMerge)
                 {
-                    for (auto sourceInput : llvm::cast<comb::TruthTableOp>(lutToMerge).getLookupTableInputs())
+                    for (auto sourceInput : castLutToMerge.getLookupTableInputs())
                         userInputs.insert(sourceInput);
                     continue;
                 }
                 userInputs.insert(input);
             }
 
+            llvm::DenseMap<Value, int> inputIndices;
+            
+            // Compute the new lookup table
+            for (const auto& [idx, input] : llvm::enumerate(userInputs))
+                inputIndices.insert({input, idx});
+
+            mlir::SmallVector<int> sourceIdxs;
+            mlir::SmallVector<int> destIdxs;
+            
+            for (auto sourceInput : castLutToMerge.getLookupTableInputs())
+                sourceIdxs.push_back(inputIndices[sourceInput]);
+
+            for (auto destInput : castUser.getLookupTableInputs())
+            {
+                if (inputIndices.contains(destInput)) destIdxs.push_back(inputIndices[destInput]);
+                else destIdxs.push_back(-1);
+            }
+
+            int mergedLookupTable = composeLookupTables(
+                sourceIdxs, castLutToMerge.getLookupTable().getValue().getZExtValue(),
+                destIdxs, castUser.getLookupTable().getValue().getZExtValue());
+
             auto argType = builder.getIntegerType(1 << userInputs.size());
             auto lookupTable = builder.create<comb::TruthTableOp>(
-                user->getLoc(), userInputs.takeVector(), builder.getIntegerAttr(argType, 0));
+                user->getLoc(), userInputs.takeVector(), builder.getIntegerAttr(argType, mergedLookupTable));
 
             LLVM_DEBUG({
                 llvm::dbgs() << "Built new op: " << lookupTable << "\n";

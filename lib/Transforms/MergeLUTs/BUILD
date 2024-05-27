@@ -9,8 +9,8 @@ package(
 
 cc_library(
     name = "MergeLUTs",
-    srcs = ["MergeLUTs.cpp"],
-    hdrs = ["MergeLUTs.h"],
+    srcs = ["MergeLUTs.cpp", "LutMergingUtils.cpp"],
+    hdrs = ["MergeLUTs.h", "LutMergingUtils.h"],
     deps = [
         ":pass_inc_gen",
         "@heir//lib/Dialect/Comb/IR:Dialect",
