@@ -13,6 +13,8 @@ cc_library(
     hdrs = ["MergeLUTs.h"],
     deps = [
         ":pass_inc_gen",
+        "@heir//lib/Dialect/Comb/IR:Dialect",
+        "@heir//lib/Graph",
         "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:MemRefDialect",
