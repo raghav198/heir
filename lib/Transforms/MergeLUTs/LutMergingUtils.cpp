@@ -7,6 +7,11 @@
 
 #define DEBUG_TYPE "merge-luts"
 
+namespace mlir
+{
+namespace heir
+{
+
 template <class T>
 llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const std::vector<T>& vec)
 {
@@ -65,11 +70,6 @@ int composeLookupTables(
     std::vector<bool> sourceLutTable = intToBits(sourceLut, 1 << sourceIdxs.size(), true);
     std::vector<bool> destLutTable = intToBits(destLut, 1 <<  destIdxs.size(), true);
 
-    LLVM_DEBUG({
-        llvm::dbgs() << "Source LUT is " << sourceLutTable << " (" << sourceLut << ")\n";
-        llvm::dbgs() << "Dest LUT is " << destLutTable << " (" << destLut << ")\n";
-    });
-
     for (const auto& [loc, index] : llvm::enumerate(sourceIdxs))
         sourceLocs.insert({index, loc});
 
@@ -83,26 +83,20 @@ int composeLookupTables(
         auto inputs = intToBits(possibleInput, composedInputCount);
         std::vector<bool> sourceInputs;
         for (auto idx : sourceIdxs) sourceInputs.push_back(inputs[idx]);
-        // LLVM_DEBUG({llvm::dbgs() << "Source input is " << sourceInputs << " (" << bitsToInt(sourceInputs) << ")\n"; });
         bool sourceOutput = sourceLutTable[bitsToInt(sourceInputs)];
 
         std::vector<bool> destInputs;
-
         for (auto idx : destIdxs)
         {
             if (idx == -1) destInputs.push_back(sourceOutput);
             else destInputs.push_back(inputs[idx]);
         }
         
-        LLVM_DEBUG({
-            llvm::dbgs() << "Possible input: " << possibleInput << " " << intToBits(possibleInput, composedInputCount) << "\n";
-            llvm::dbgs() << "\tSource inputs: " << sourceInputs << " " << bitsToInt(sourceInputs) << " -> " << sourceOutput << "\n";
-            llvm::dbgs() << "\tDest inputs: " << destInputs << " " << bitsToInt(destInputs) << " -> " << bitsToInt(destInputs) << "\n";
-            llvm::dbgs() << "\tOutput: " << destLutTable[bitsToInt(destInputs)] << "\n";
-        });
-        
         composedLookupTable.push_back(destLutTable[bitsToInt(destInputs)]);
     }
 
     return bitsToIntFlip(composedLookupTable);
 }
+
+} // namespace heir
+} // namespace mlir
