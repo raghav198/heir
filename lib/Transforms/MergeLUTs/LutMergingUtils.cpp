@@ -17,34 +17,13 @@ llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const std::vector<T>& vec)
     return os;
 }
 
-std::vector<bool> intToBits(int value, int width)
+std::vector<bool> intToBits(int value, int width, bool flip = false)
 {
     std::vector<bool> bits;
     bits.reserve(width);
     for (int i = 0; i < width; i++)
-        bits.push_back((value & (1 << (width - i - 1))) != 0);
+        bits.push_back((value & (1 << (flip ? i : (width - i - 1)))) != 0);
     return bits;
-}
-
-std::vector<bool> intToBitsFlip(int value, int width)
-{
-    std::vector<bool> bits;
-    bits.reserve(width);
-    for (int i = 0; i < width; i++)
-        bits.push_back((value & (1 << i)) != 0);
-    return bits;
-}
-
-int bitsToInt(const std::vector<bool>& bits)
-{
-    int value = 0;
-    int power = 0;
-    for (const auto& bit : llvm::reverse(bits))
-    {
-        if (bit) value += (1 << power);
-        power++;
-    }
-    return value;
 }
 
 int bitsToIntFlip(const std::vector<bool>& bits)
@@ -52,6 +31,19 @@ int bitsToIntFlip(const std::vector<bool>& bits)
     int value = 0;
     int power = 0;
     for (const auto& bit : bits)
+    {
+        if (bit) value += (1 << power);
+        power++;
+    }
+    return value;
+}
+
+int bitsToInt(const std::vector<bool>& bits)
+{
+    int value = 0;
+    int power = 0;
+
+    for (const auto& bit : llvm::reverse(bits))
     {
         if (bit) value += (1 << power);
         power++;
@@ -70,8 +62,8 @@ int composeLookupTables(
     llvm::DenseMap<int, int> sourceLocs;
     llvm::DenseMap<int, int> destLocs;
 
-    std::vector<bool> sourceLutTable = intToBitsFlip(sourceLut, 1 << sourceIdxs.size());
-    std::vector<bool> destLutTable = intToBitsFlip(destLut, 1 <<  destIdxs.size());
+    std::vector<bool> sourceLutTable = intToBits(sourceLut, 1 << sourceIdxs.size(), true);
+    std::vector<bool> destLutTable = intToBits(destLut, 1 <<  destIdxs.size(), true);
 
     LLVM_DEBUG({
         llvm::dbgs() << "Source LUT is " << sourceLutTable << " (" << sourceLut << ")\n";
