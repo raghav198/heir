@@ -13,6 +13,7 @@ cc_library(
     hdrs = ["MergeLUTs.h", "LutMergingUtils.h"],
     deps = [
         ":pass_inc_gen",
+        ":SynthesizeArithmeticLut",
         "@heir//lib/Dialect/Comb/IR:Dialect",
         "@heir//lib/Graph",
         "@llvm-project//mlir:AffineDialect",
@@ -24,8 +25,19 @@ cc_library(
     ]
 )
 
-# MergeLUTs tablegen and headers
+cc_library(
+    name = "SynthesizeArithmeticLut",
+    srcs = ["SynthesizeArithmeticLut.cpp"],
+    hdrs = ["SynthesizeArithmeticLut.h"],
+    deps = [
+        "@llvm-project//mlir:Pass",
+        "@com_google_ortools//ortools/base",
+        "@com_google_ortools//ortools/sat:model",
+        "@com_google_ortools//ortools/constraint_solver:cp"
+    ]
+)
 
+# MergeLUTs tablegen and headers
 gentbl_cc_library(
     name = "pass_inc_gen",
     tbl_outs = [

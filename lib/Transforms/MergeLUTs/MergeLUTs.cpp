@@ -3,10 +3,10 @@
 #include "lib/Dialect/Comb/IR/CombOps.h"
 #include "lib/Graph/Graph.h"
 #include "lib/Transforms/MergeLUTs/LutMergingUtils.h"
+#include "lib/Transforms/MergeLUTs/SynthesizeArithmeticLut.h"
 #include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
-#include "mlir/include/mlir/Transforms/Passes.h"  // from @llvm-project
 #include "llvm/include/llvm/Support/Debug.h"   // from @llvm-project
 
 #include <iostream>
@@ -41,6 +41,8 @@ graph::Graph<mlir::Operation*> makeLUTGraph(mlir::Operation *root)
 
 mlir::Operation *nextLutToMerge(mlir::Operation *root, graph::Graph<mlir::Operation *>& lutGraph)
 {
+    static std::set<mlir::Operation *> alreadyMerged;
+
     // Return the vertex with the minimum non-zero out-degree, or nullptr if no such vertex exists
     lutGraph = makeLUTGraph(root);
     mlir::Operation *next = nullptr;
@@ -48,11 +50,14 @@ mlir::Operation *nextLutToMerge(mlir::Operation *root, graph::Graph<mlir::Operat
 
     for (auto *vertex : lutGraph.getVertices())
     {
+        if (alreadyMerged.find(vertex) != alreadyMerged.end()) continue;
+
         auto outEdges = lutGraph.edgesOutOf(vertex);
         if (outEdges.empty()) continue;
         if (outEdges.size() < outDegree) next = vertex;
     }
 
+    alreadyMerged.insert(next);
     return next;
 }
 
@@ -84,7 +89,7 @@ unsigned int getMergedLookupTable(mlir::Operation *user, mlir::Operation *lutToM
     return mergedLookupTable;
 }
 
-void performSingleMerge(mlir::Operation *user, mlir::Operation *lutToMerge, mlir::OpBuilder& builder)
+bool performSingleMerge(mlir::Operation *user, mlir::Operation *lutToMerge, mlir::OpBuilder& builder)
 {
     auto castLutToMerge = llvm::cast<comb::TruthTableOp>(lutToMerge);
     auto castUser = llvm::cast<comb::TruthTableOp>(user);
@@ -99,8 +104,6 @@ void performSingleMerge(mlir::Operation *user, mlir::Operation *lutToMerge, mlir
             llvm::dbgs() << "- user input " << input << "\n";
     });
 
-    builder.setInsertionPointAfter(user);
-
     SetVector<Value> userInputs;
     for (auto input : castUser.getLookupTableInputs())
     {
@@ -114,17 +117,34 @@ void performSingleMerge(mlir::Operation *user, mlir::Operation *lutToMerge, mlir
     }
 
     unsigned int mergedLookupTable = getMergedLookupTable(user, lutToMerge, userInputs);
+    
+    auto synthesizer = ArithmeticLutSynthesizer::getInstance();
 
-    auto argType = builder.getIntegerType(1 << userInputs.size(), false);
-    auto lookupTable = builder.create<comb::TruthTableOp>(
-        user->getLoc(), userInputs.takeVector(), builder.getIntegerAttr(argType, mergedLookupTable));
+    auto lookupTable = builder.getIntegerAttr(builder.getIntegerType(1 << userInputs.size(), false), mergedLookupTable);
+    auto synthesisResult = synthesizer.synthesize(lookupTable);
+    if (mlir::failed(synthesisResult))
+    {
+        LLVM_DEBUG({ llvm::dbgs() << "Synthesis for " << mergedLookupTable << " failed, skipping...\n"; });
+        return false;
+    }
 
     LLVM_DEBUG({
-        llvm::dbgs() << "Built new op: " << lookupTable << "\n";
+        llvm::dbgs() << "Successfully synthesized LUT: " << synthesisResult->lookupTable << "\n";
+        for (auto coeff : synthesisResult->coefficients)
+            llvm::dbgs() << "\tCoefficient: " << coeff << "\n";
+    });
+    
+    builder.setInsertionPointAfter(user);
+    auto lookupTableOp = builder.create<comb::TruthTableOp>(
+        user->getLoc(), userInputs.takeVector(), lookupTable);
+
+    LLVM_DEBUG({
+        llvm::dbgs() << "Built new op: " << lookupTableOp << "\n";
         llvm::dbgs() << "Replacing all uses of " << user->getResult(0) << " with new op\n";
     });
     
-    user->getResult(0).replaceAllUsesWith({lookupTable});
+    user->getResult(0).replaceAllUsesWith({lookupTableOp});
+    return true;
 }
 
 struct MergeLUTs : public impl::MergeLUTsBase<MergeLUTs> {
@@ -137,22 +157,24 @@ struct MergeLUTs : public impl::MergeLUTsBase<MergeLUTs> {
 
         while ((lutToMerge = nextLutToMerge(getOperation(), lutGraph)) != nullptr)
         {
-            
             LLVM_DEBUG({
                 for (auto *user : lutGraph.edgesOutOf(lutToMerge))
                     llvm::dbgs() << "Merging " << *lutToMerge << " into " << *user << "\n";
             });
 
+            std::vector<mlir::Operation *> successfulMerges;
+
             for (auto *user : lutGraph.edgesOutOf(lutToMerge))
             {
                 mlir::OpBuilder builder(&getContext());
-                performSingleMerge(user, lutToMerge, builder);
+                if (performSingleMerge(user, lutToMerge, builder)) successfulMerges.push_back(user);
             }
 
-            for (auto *user : lutGraph.edgesOutOf(lutToMerge))
+            for (auto *user : successfulMerges)
                 user->erase();
 
-            lutToMerge->erase();
+            if (successfulMerges.size() == lutGraph.edgesOutOf(lutToMerge).size())
+                lutToMerge->erase();
         }
     }
 };
