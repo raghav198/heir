@@ -41,6 +41,7 @@
 #include "lib/Transforms/ForwardStoreToLoad/ForwardStoreToLoad.h"
 #include "lib/Transforms/FullLoopUnroll/FullLoopUnroll.h"
 #include "lib/Transforms/MergeLUTs/MergeLUTs.h"
+#include "lib/Transforms/ShrinkLutConstants/ShrinkLutConstants.h"
 #include "lib/Transforms/Secretize/Passes.h"
 #include "lib/Transforms/StraightLineVectorizer/StraightLineVectorizer.h"
 #include "lib/Transforms/UnusedMemRef/UnusedMemRef.h"
@@ -418,6 +419,7 @@ void tosaToBooleanFpgaTfhePipeline(const std::string &yosysFilesPath,
         pm.addPass(createSCCPPass());
 
         pm.addPass(createMergeLUTs());
+        pm.addPass(createShrinkLutConstants());
 
       });
 }
@@ -505,6 +507,7 @@ int main(int argc, char **argv) {
   lwe::registerLWEPasses();
   ::mlir::heir::polynomial::registerPolynomialPasses();
   secret::registerSecretPasses();
+  
   tensor_ext::registerTensorExtPasses();
   registerElementwiseToAffinePasses();
   registerSecretizePasses();
@@ -513,6 +516,7 @@ int main(int argc, char **argv) {
   registerStraightLineVectorizerPasses();
   registerUnusedMemRefPasses();
   registerMergeLUTsPasses();
+  registerShrinkLutConstantsPasses();
   // Register yosys optimizer pipeline if configured.
 #ifndef HEIR_NO_YOSYS
 #ifndef HEIR_ABC_BINARY

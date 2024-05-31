@@ -75,6 +75,7 @@ cc_binary(
         "@heir//lib/Transforms/StraightLineVectorizer",
         "@heir//lib/Transforms/UnusedMemRef",
         "@heir//lib/Transforms/MergeLUTs",
+        "@heir//lib/Transforms/ShrinkLutConstants",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:AffineToStandard",
