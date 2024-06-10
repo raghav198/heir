@@ -7,30 +7,25 @@ package(
 
 cc_library(
     name = "Transforms",
-    hdrs = [
-        "Passes.h",
-    ],
+    hdrs = ["Passes.h"],
     deps = [
-        ":SetDefaultParameters",
+        ":CGGICanonicalizeToLuts",
         ":pass_inc_gen",
         "@heir//lib/Dialect/CGGI/IR:Dialect",
+        "@llvm-project//mlir:IR",
     ],
 )
 
 cc_library(
-    name = "SetDefaultParameters",
-    srcs = ["SetDefaultParameters.cpp"],
-    hdrs = [
-        "SetDefaultParameters.h",
-    ],
+    name = "CGGICanonicalizeToLuts",
+    srcs = ["CGGICanonicalizeToLuts.cpp"],
+    hdrs = ["CGGICanonicalizeToLuts.h"],
     deps = [
         ":pass_inc_gen",
         "@heir//lib/Dialect/CGGI/IR:Dialect",
-        "@heir//lib/Dialect/LWE/IR:Dialect",
-        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
-        "@llvm-project//mlir:PolynomialDialect",
+        "@llvm-project//mlir:Transforms",
     ],
 )
 

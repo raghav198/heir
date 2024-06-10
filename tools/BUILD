@@ -76,7 +76,7 @@ cc_binary(
         "@heir//lib/Transforms/UnusedMemRef",
         "@heir//lib/Transforms/MergeLUTs",
         "@heir//lib/Transforms/ShrinkLutConstants",
-        "@heir//lib/Transforms/CGGICanonicalizeToLuts",
+        "@heir//lib/Dialect/CGGI/Transforms:CGGICanonicalizeToLuts",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:AffineToStandard",
