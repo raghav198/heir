@@ -10,7 +10,6 @@ namespace mlir
 {
 namespace heir
 {
-
 struct LutMergeResult {
     llvm::SmallVector<mlir::Value> userInputs;
     mlir::IntegerAttr lookupTable;

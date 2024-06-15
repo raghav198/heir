@@ -70,7 +70,7 @@ bool performSingleMerge(mlir::Operation *user, mlir::Operation *lutToMerge, mlir
 
 void executeMerge(mlir::Operation *user, const LutMergeResult& mergeResult, mlir::OpBuilder &builder)
 {
-    llvm::dbgs() << "Executing merge on " << user << "\n";
+    LLVM_DEBUG(llvm::dbgs() << "Executing merge on " << user << "\n");
     auto [userInputs, lookupTable, synthesisResult] = mergeResult;
 
     builder.setInsertionPointAfter(user);
@@ -79,7 +79,7 @@ void executeMerge(mlir::Operation *user, const LutMergeResult& mergeResult, mlir
 
 
     lookupTableOp->setAttr("coefficients", builder.getDenseI32ArrayAttr(synthesisResult.coefficients));
-    lookupTableOp->setAttr("prepped_lut", builder.getIntegerAttr(builder.getIntegerType(synthesisResult.lutSize), synthesisResult.lookupTable));
+    lookupTableOp->setAttr("prepped_lut", builder.getIndexAttr(synthesisResult.lookupTable));
 
     LLVM_DEBUG({
         llvm::dbgs() << "Built new op: " << lookupTableOp << "\n";
@@ -110,13 +110,13 @@ struct MergeLUTs : public impl::MergeLUTsBase<MergeLUTs> {
 
             for (auto *user : lutGraph.edgesOutOf(lutToMerge))
             {
-                llvm::dbgs() << "Try merge " << *lutToMerge << " to " << *user << "\n";
+                LLVM_DEBUG(llvm::dbgs() << "Try merge " << *lutToMerge << " to " << *user << "\n");
                 auto result = mergeLutsIfPossible(llvm::cast<comb::TruthTableOp>(user), llvm::cast<comb::TruthTableOp>(lutToMerge), builder);
                 if (mlir::succeeded(result)) mergeResults.insert({user, *result});
-                else llvm::dbgs() << "Merge " << *lutToMerge << " to " << *user << " failed\n";
+                else LLVM_DEBUG(llvm::dbgs() << "Merge " << *lutToMerge << " to " << *user << " failed\n");
             }
 
-            llvm::dbgs() << "Of " << lutGraph.edgesOutOf(lutToMerge).size() << " edges, " << mergeResults.size() << " succeeded\n";
+            LLVM_DEBUG(llvm::dbgs() << "Of " << lutGraph.edgesOutOf(lutToMerge).size() << " edges, " << mergeResults.size() << " succeeded\n");
             if (mergeResults.size() != lutGraph.edgesOutOf(lutToMerge).size()) continue;
             for (auto& [user, result] : mergeResults)
             {

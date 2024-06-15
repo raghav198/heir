@@ -4,6 +4,8 @@
 #include "ortools/constraint_solver/constraint_solver.h"
 #include "llvm/include/llvm/Support/Debug.h"
 
+#define DEBUG_TYPE "merge-luts"
+
 namespace mlir
 {
 namespace heir
@@ -64,18 +66,21 @@ mlir::FailureOr<ArithmeticLut> ArithmeticLutSynthesizer::doSynth(mlir::IntegerAt
     std::vector<unsigned int> coefficients;
     std::vector<operations_research::IntVar *> coefficientVars;
 
-    llvm::dbgs() << "Synthesizing for table " << lookupTable << "\n";
+    LLVM_DEBUG(llvm::dbgs() << "Synthesizing for table " << lookupTable << "\n");
+    
 
     unsigned int arity = llvm::Log2_64(lookupTable.getType().getIntOrFloatBitWidth());
     unsigned int tableValues = lookupTable.getUInt();
 
-    llvm::dbgs() << "\tArity: " << arity << "\n";
-    llvm::dbgs() << "\tValues: " << tableValues << "\n";
+    LLVM_DEBUG({
+        llvm::dbgs() << "\tArity: " << arity << "\n";
+        llvm::dbgs() << "\tValues: " << tableValues << "\n";
+    });
 
     operations_research::Solver solver("solver");
     coefficientVars.reserve(arity);
     
-    for (int i = 0; i < arity; i++) coefficientVars.push_back(solver.MakeIntVar(0, maxLutSize - 1));
+    for (int i = 0; i < arity; i++) coefficientVars.push_back(solver.MakeIntVar(1 - maxLutSize, maxLutSize - 1));
     // for (int i = 0; i < arity; i++) coefficientVars[i]->SetValue(1);
 
     std::vector<operations_research::IntExpr *> ones;
@@ -119,10 +124,11 @@ mlir::FailureOr<ArithmeticLut> ArithmeticLutSynthesizer::doSynth(mlir::IntegerAt
     while (solver.NextSolution())
     {
         std::vector<int> coefficients = resolve(coefficientVars);
+        LLVM_DEBUG(llvm::dbgs() << "\tSUCCESS\n");
         return ArithmeticLut(resolve(ones), resolve(zeros), coefficients, maxLutSize);
     }
     solver.EndSearch();
-
+    LLVM_DEBUG(llvm::dbgs() << "\tFAILURE\n");
     return mlir::failure();
 }
 
