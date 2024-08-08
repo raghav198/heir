@@ -4,6 +4,7 @@
 
 #include "lib/Conversion/BGVToOpenfhe/BGVToOpenfhe.h"
 #include "lib/Conversion/BGVToPolynomial/BGVToPolynomial.h"
+#include "lib/Conversion/CGGIToOpenfhe/CGGIToOpenfhe.h"
 #include "lib/Conversion/CGGIToTfheRust/CGGIToTfheRust.h"
 #include "lib/Conversion/CGGIToTfheRustBool/CGGIToTfheRustBool.h"
 #include "lib/Conversion/CombToCGGI/CombToCGGI.h"
@@ -15,6 +16,7 @@
 #include "lib/Dialect/BGV/Transforms/AddClientInterface.h"
 #include "lib/Dialect/BGV/Transforms/Passes.h"
 #include "lib/Dialect/CGGI/IR/CGGIDialect.h"
+#include "lib/Dialect/CGGI/Transforms/CGGICanonicalizeToLuts.h"
 #include "lib/Dialect/CGGI/Transforms/Passes.h"
 #include "lib/Dialect/Comb/IR/CombDialect.h"
 #include "lib/Dialect/Jaxite/IR/JaxiteDialect.h"
@@ -42,9 +44,8 @@
 #include "lib/Transforms/ForwardStoreToLoad/ForwardStoreToLoad.h"
 #include "lib/Transforms/FullLoopUnroll/FullLoopUnroll.h"
 #include "lib/Transforms/MergeLUTs/MergeLUTs.h"
-#include "lib/Transforms/ShrinkLutConstants/ShrinkLutConstants.h"
-#include "lib/Dialect/CGGI/Transforms/CGGICanonicalizeToLuts.h"
 #include "lib/Transforms/Secretize/Passes.h"
+#include "lib/Transforms/ShrinkLutConstants/ShrinkLutConstants.h"
 #include "lib/Transforms/StraightLineVectorizer/StraightLineVectorizer.h"
 #include "lib/Transforms/UnusedMemRef/UnusedMemRef.h"
 #include "mlir/include/mlir/Conversion/AffineToStandard/AffineToStandard.h"  // from @llvm-project
@@ -550,6 +551,7 @@ int main(int argc, char **argv) {
   ::mlir::heir::polynomial::registerPolynomialToStandardPasses();
   registerCGGIToTfheRustPasses();
   registerCGGIToTfheRustBoolPasses();
+  registerCGGIToOpenfhePasses();
   registerSecretToBGVPasses();
 
   // Interfaces in HEIR
