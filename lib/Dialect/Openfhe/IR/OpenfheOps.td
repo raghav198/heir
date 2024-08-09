@@ -47,6 +47,35 @@ class Openfhe_BinaryOp<string mnemonic, list<Trait> traits = []>
   let results = (outs RLWECiphertext:$output);
 }
 
+class Openfhe_lwe_BinaryOp<string mnemonic, list<Trait> traits = []>
+  :  Openfhe_Op<mnemonic, traits # [
+    Pure,
+    AllTypesMatch<["lhs", "rhs", "output"]>,
+]>{
+ let arguments = (ins
+    Openfhe_CryptoContext:$cryptoContext,
+    LWECiphertext:$lhs,
+    LWECiphertext:$rhs
+  );
+  let results = (outs LWECiphertext:$output);
+}
+
+def MakeLutOp : Openfhe_Op<"make_lut", [Pure]> {
+  let arguments = (ins
+    DenseI32ArrayAttr:$values
+  );
+  let results = (outs Openfhe_LUT:$output);
+}
+
+def EvalFuncOp : Openfhe_Op<"eval_func", [Pure]> {
+  let arguments = (ins
+    Openfhe_CryptoContext:$cryptoContext,
+    Openfhe_LUT:$lut,
+    LWECiphertext:$input
+  );
+  let results = (outs LWECiphertext:$output);
+}
+
 def EncryptOp : Openfhe_Op<"encrypt", [Pure]> {
   let arguments = (ins
     Openfhe_CryptoContext:$cryptoContext,
@@ -69,6 +98,9 @@ def AddOp : Openfhe_BinaryOp<"add"> { let summary = "OpenFHE add operation of tw
 def SubOp : Openfhe_BinaryOp<"sub"> { let summary = "OpenFHE sub operation of two ciphertexts."; }
 
 def MulOp : Openfhe_BinaryOp<"mul"> { let summary = "OpenFHE mul operation of two ciphertexts with relinearization."; }
+
+def LWEAddOp : Openfhe_lwe_BinaryOp<"lwe_add"> { let summary = "OpenFHE add operation of two LWE ciphertexts."; }
+def LWESubOp : Openfhe_lwe_BinaryOp<"lwe_sub"> { let summary = "OpenFHE sub operation of two LWE ciphertexts."; }
 
 def MulNoRelinOp : Openfhe_Op<"mul_no_relin", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
   let summary = "OpenFHE mul operation of two ciphertexts without relinearization.";
@@ -104,6 +136,19 @@ def MulConstOp : Openfhe_Op<"mul_const",[
     I64:$constant
   );
   let results = (outs RLWECiphertext:$output);
+}
+
+def LWEMulConstOp : Openfhe_Op<"lwe_mul_const",[
+    Pure,
+    AllTypesMatch<["ciphertext", "output"]>
+]> {
+  let summary = "OpenFHE mul operation of an LWE ciphertext and a constant.";
+  let arguments = (ins
+    Openfhe_CryptoContext:$cryptoContext,
+    LWECiphertext:$ciphertext,
+    I64:$constant
+  );
+  let results = (outs LWECiphertext:$output);
 }
 
 def NegateOp : Openfhe_UnaryOp<"negate"> { let summary = "OpenFHE negate operation of a ciphertext."; }
