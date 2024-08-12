@@ -123,26 +123,34 @@ struct ConvertLutLincombOp : public OpConversionPattern<cggi::LutLinCombOp> {
               .getResult()));
     }
 
-    openfhe::LWEAddOp sum =
-        b.create<openfhe::LWEAddOp>(cryptoContext, preppedInputs[0].getResult(),
-                                    preppedInputs[1].getResult());
+    mlir::Value lutInput;
 
-    for (int i = 2; i < preppedInputs.size(); i++) {
-      sum = b.create<openfhe::LWEAddOp>(cryptoContext, sum, preppedInputs[i]);
+    if (preppedInputs.size() > 1) {
+      openfhe::LWEAddOp sum = b.create<openfhe::LWEAddOp>(
+          cryptoContext, preppedInputs[0].getResult(),
+          preppedInputs[1].getResult());
+
+      for (int i = 2; i < preppedInputs.size(); i++) {
+        sum = b.create<openfhe::LWEAddOp>(cryptoContext, sum, preppedInputs[i]);
+      }
+
+      lutInput = sum.getResult();
+    } else {
+      lutInput = preppedInputs[0].getResult();
     }
 
     // now create the LUT
-
     llvm::SmallVector<int, 4> lutBits;
     auto lutAttr = op.getLookupTableAttr();
     int width = lutAttr.getValue().getBitWidth();
     for (int i = 0; i < width; i++) {
-      if ((lutAttr.getValue().getZExtValue() >> i) & 1)
-        lutBits.push_back(i);
+      if ((lutAttr.getValue().getZExtValue() >> i) & 1) lutBits.push_back(i);
     }
 
-    auto makeLut = b.create<openfhe::MakeLutOp>(cryptoContext, b.getDenseI32ArrayAttr(lutBits));
-    auto evalFunc = b.create<openfhe::EvalFuncOp>(sum.getResult().getType(), cryptoContext, makeLut.getResult(), sum.getResult());
+    auto makeLut = b.create<openfhe::MakeLutOp>(
+        cryptoContext, b.getDenseI32ArrayAttr(lutBits));
+    auto evalFunc = b.create<openfhe::EvalFuncOp>(
+        lutInput.getType(), cryptoContext, makeLut.getResult(), lutInput);
     rewriter.replaceOp(op, evalFunc);
     return success();
   }

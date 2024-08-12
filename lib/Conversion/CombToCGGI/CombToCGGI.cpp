@@ -353,13 +353,20 @@ class SecretGenericOpLUTConversion
       rewriter.replaceOpWithNewOp<cggi::Lut2Op>(
         op, encodedInputs[0], encodedInputs[1], 
         truthOp.getLookupTable());
-    } else {
+    } else if (encodedInputs.size() == 3) {
       rewriter.replaceOpWithNewOp<cggi::Lut3Op>(
         op, encodedInputs[0], encodedInputs[1], encodedInputs[2],
         truthOp.getLookupTable());
+    } else {
+      auto newOp = rewriter.replaceOpWithNewOp<cggi::LutLinCombOp>(op, encodedInputs);
+      mlir::SmallVector<int> coefficients;
+      coefficients.reserve(encodedInputs.size());
+      for (int i = 0; i < encodedInputs.size(); i++) {
+        coefficients.push_back(1 << i);
+      }
+      newOp->setAttr("coefficients", rewriter.getDenseI32ArrayAttr(coefficients));
+      newOp->setAttr("lookup_table", truthOp.getLookupTable());
     }
-
-    
   }
 };
 
