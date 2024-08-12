@@ -4,8 +4,6 @@
 
 #include "lib/Dialect/LWE/IR/LWETypes.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheTypes.h"
-#include "llvm/include/llvm/ADT/TypeSwitch.h"           // from @llvm-project
-#include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinTypes.h"          // from @llvm-project
 #include "mlir/include/mlir/IR/Operation.h"             // from @llvm-project
@@ -13,6 +11,8 @@
 #include "mlir/include/mlir/IR/Value.h"                 // from @llvm-project
 #include "mlir/include/mlir/Support/LLVM.h"             // from @llvm-project
 #include "mlir/include/mlir/Support/LogicalResult.h"    // from @llvm-project
+#include "llvm/include/llvm/ADT/TypeSwitch.h"           // from @llvm-project
+#include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
 
 namespace mlir {
 namespace heir {
@@ -27,6 +27,8 @@ FailureOr<std::string> convertType(Type type) {
           [&](auto ty) { return std::string("CiphertextT"); })
       .Case<lwe::RLWEPlaintextType>(
           [&](auto ty) { return std::string("Plaintext"); })
+      .Case<lwe::LWECiphertextType>(
+        [&](auto ty) { return std::string("LWECiphertext"); })
       .Case<openfhe::EvalKeyType>(
           [&](auto ty) { return std::string("EvalKeyT"); })
       .Case<openfhe::PrivateKeyType>(
@@ -59,6 +61,9 @@ FailureOr<std::string> convertType(Type type) {
         os << "std::vector<" << eltTyResult.value() << ">";
         return FailureOr<std::string>(std::string(result));
       })
+      .Case<MemRefType>([&](MemRefType ty) {
+        return convertType(RankedTensorType::get(ty.getShape(), ty.getElementType()));
+      })
       .Default([&](Type &) { return failure(); });
 }
 
@@ -69,7 +74,7 @@ FailureOr<Value> getContextualCryptoContext(Operation *op) {
                             .front()
                             .getArguments()
                             .front();
-  if (!cryptoContext.getType().isa<openfhe::CryptoContextType>()) {
+  if (!mlir::isa<openfhe::CryptoContextType>(cryptoContext.getType())) {
     return op->emitOpError()
            << "Found op in a function without a crypto context argument.";
   }

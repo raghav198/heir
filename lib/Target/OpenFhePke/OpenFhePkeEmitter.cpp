@@ -15,6 +15,7 @@
 #include "lib/Target/OpenFhePke/OpenFheUtils.h"
 #include "lib/Target/Utils.h"
 #include "llvm/include/llvm/ADT/TypeSwitch.h"           // from @llvm-project
+#include "llvm/include/llvm/Support/Debug.h"      // from @llvm-project
 #include "llvm/include/llvm/Support/FormatVariadic.h"   // from @llvm-project
 #include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"   // from @llvm-project

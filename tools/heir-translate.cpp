@@ -1,5 +1,6 @@
 #include "lib/Target/Jaxite/JaxiteEmitter.h"
 #include "lib/Target/Metadata/MetadataEmitter.h"
+#include "lib/Target/OpenFhePke/OpenFheBinEmitter.h"
 #include "lib/Target/OpenFhePke/OpenFhePkeEmitter.h"
 #include "lib/Target/OpenFhePke/OpenFhePkeHeaderEmitter.h"
 #include "lib/Target/TfheRust/TfheRustEmitter.h"
@@ -23,6 +24,8 @@ int main(int argc, char **argv) {
   // OpenFHE
   mlir::heir::openfhe::registerToOpenFhePkeTranslation();
   mlir::heir::openfhe::registerToOpenFhePkeHeaderTranslation();
+
+  mlir::heir::openfhe::registerToOpenFheBinTranslation();
 
   return failed(mlir::mlirTranslateMain(argc, argv, "HEIR Translation Tool"));
 }

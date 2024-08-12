@@ -62,6 +62,7 @@ class Openfhe_lwe_BinaryOp<string mnemonic, list<Trait> traits = []>
 
 def MakeLutOp : Openfhe_Op<"make_lut", [Pure]> {
   let arguments = (ins
+    Openfhe_CryptoContext:$cryptoContext,
     DenseI32ArrayAttr:$values
   );
   let results = (outs Openfhe_LUT:$output);

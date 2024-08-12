@@ -141,10 +141,9 @@ struct ConvertLutLincombOp : public OpConversionPattern<cggi::LutLinCombOp> {
         lutBits.push_back(i);
     }
 
-    auto makeLut = b.create<openfhe::MakeLutOp>(b.getDenseI32ArrayAttr(lutBits));
+    auto makeLut = b.create<openfhe::MakeLutOp>(cryptoContext, b.getDenseI32ArrayAttr(lutBits));
     auto evalFunc = b.create<openfhe::EvalFuncOp>(sum.getResult().getType(), cryptoContext, makeLut.getResult(), sum.getResult());
     rewriter.replaceOp(op, evalFunc);
-    // rewriter.replaceOpWithNewOp<openfhe::EvalFuncOp>(op, cryptoContext, makeLut.getResult(), sum.getResult());
     return success();
   }
 };

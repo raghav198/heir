@@ -67,3 +67,28 @@ cc_library(
         "@llvm-project//mlir:TranslateLib",
     ],
 )
+
+
+cc_library(
+    name = "OpenFheBinEmitter",
+    srcs = ["OpenFheBinEmitter.cpp"],
+    hdrs = [
+        "OpenFheBinEmitter.h"
+    ],
+    deps = [
+        ":OpenFheUtils",
+        ":OpenFhePkeEmitter",
+        "@heir//lib/Analysis/SelectVariableNames",
+        "@heir//lib/Dialect/LWE/IR:Dialect",
+        "@heir//lib/Dialect/Openfhe/IR:Dialect",
+        "@heir//lib/Target:Utils",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:PolynomialDialect",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TensorDialect",
+        "@llvm-project//mlir:TranslateLib",
+    ],
+)
