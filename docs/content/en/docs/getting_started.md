@@ -1,18 +1,58 @@
 <!-- mdformat off(yaml frontmatter) -->
---- title: Getting Started
-weight: 1
+---
+title: Getting Started
+weight: 10
 ---
 <!-- mdformat on -->
 
-## Prerequisites
+## Getting HEIR
+
+### Building From Source
+
+#### Prerequisites
 
 -   [Git](https://git-scm.com/)
+-   A C++ compiler and linker ([clang](https://clang.llvm.org/) and [lld](https://lld.llvm.org/) are recommended).
 -   Bazel via [bazelisk](https://github.com/bazelbuild/bazelisk), or version
     `>=5.5`
--   A C compiler (like [gcc](https://gcc.gnu.org/) or
-    [clang](https://clang.llvm.org/))
+-   See [Development](https://heir.dev/docs/development) for additional prerequisites for active development
 
-## Clone and build the project
+  <details>
+  <summary>Detailed Instructions</summary>
+  The first two requirements are frequently pre-installed
+  or can be installed via the system package manager.
+  For example, on Ubuntu, these can be installed with
+
+  ```bash
+  sudo apt-get update && sudo apt-get install clang lld
+  ```
+
+  You can download the latest Bazelisk release, e.g.,
+  for linux-amd64 (see the
+  [Bazelisk Release Page](https://github.com/bazelbuild/bazelisk/releases/latest)
+  for a list of available binaries):
+  ```bash
+  wget -c https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
+  mv bazelisk-linux-amd64 bazel
+  chmod +x bazel
+  ```
+  You will then likely want to move `bazel` to a location on your PATH,
+  or add its location to your PATH, e.g.:
+  ```bash
+  mkdir ~/bin
+  echo 'export PATH=$PATH:~/bin' >> ~/.bashrc
+  mv bazel ~/bin/bazel
+  ```
+
+  Note that on linux systems, your OS user must **not** be `root` as bazel might refuse to work if run as root.
+  </details>
+
+
+#### Clone and build the project
+
+You can clone and build HEIR from the terminal as described below.
+Please see [Development](https://heir.dev/docs/development) for information on
+IDE configuration if you want to use an IDE to build HEIR.
 
 ```bash
 git clone git@github.com:google/heir.git && cd heir
@@ -27,7 +67,7 @@ speed up builds, use the following build setting:
 bazel build --//:enable_yosys=0 @heir//tools:heir-opt
 ```
 
-## Optional: Run the tests
+#### Optional: Run the tests
 
 ```bash
 bazel test @heir//...
@@ -39,7 +79,26 @@ Like above, run the following to skip tests that depend on Yosys:
 bazel test --//:enable_yosys=0 --test_tag_filters=-yosys @heir//...
 ```
 
-## Run the `dot-product` example
+### Using a pre-built nightly binary
+
+HEIR releases a [nightly](https://github.com/google/heir/releases/tag/nightly)
+binary for Linux x86-64. This is intended for testing compiler passes and not
+for production use.
+
+```bash
+wget https://github.com/google/heir/releases/download/nightly/heir-opt
+chmod +x heir-opt
+./heir-opt --help
+```
+
+Then you can run the examples below, replacing `bazel run //tools:heir-opt --` with
+`./heir-opt`. HEIR also publishes `heir-translate` and `heir-lsp` in the same way.
+
+
+
+## Using HEIR
+
+### Run the `dot-product` example
 
 The `dot-product` program computes the dot product of two length-8
 vectors of 16-bit integers (`i16` in MLIR parlance).
@@ -134,8 +193,8 @@ Next, we use the `heir-translate` tool to run code generation for the
 OpenFHE `pke` API.
 
 ```bash
-bazel run //tools:heir-translate -- emit-openfhe-pke-header $PWD/output.mlir > heir_output.h
-bazel run //tools:heir-translate -- emit-openfhe-pke $PWD/output.mlir > heir_output.cpp
+bazel run //tools:heir-translate -- --emit-openfhe-pke-header $PWD/output.mlir > heir_output.h
+bazel run //tools:heir-translate -- --emit-openfhe-pke $PWD/output.mlir > heir_output.cpp
 ```
 
 The results:
@@ -205,15 +264,29 @@ int16_t dot_product__decrypt__result0(CryptoContextT v34, CiphertextT v35, Priva
 ```
 
 At this point we can compile the program as we would a normal OpenFHE program.
-In the bazel build system, this would look like
+Note that the above two files just contain the compiled function and
+encryption/decryption helpers, and does not include any code that provides
+specific inputs or calls these functions.
+
+Next we'll create a harness that provides sample inputs, encrypts them, runs
+the compiled function, and decrypts the result. Once you have the generated
+header and cpp files, you can do this with any build system. We will use bazel
+for consistency.
+
+Create a file called `BUILD` in the same directory as the header and cpp files
+above, with the following contents:
 
 ```BUILD
+# A library build target that encapsulates the HEIR-generated code.
 cc_library(
     name = "dot_product_codegen",
     srcs = ["heir_output.cpp"],
     hdrs = ["heir_output.h"],
     deps = ["@openfhe//:pke"],
 )
+
+# An executable build target that contains your main function and links
+# against the above.
 cc_binary(
     name = "dot_product_main",
     srcs = ["dot_product_main.cpp"],
@@ -225,7 +298,7 @@ cc_binary(
 )
 ```
 
-Where `dot_product_main.cpp` contains
+Where `dot_product_main.cpp` is a new file containing
 
 ```cpp
 #include <cstdint>
@@ -292,7 +365,7 @@ Expected: 240
 Actual: 240
 ```
 
-## Optional: Run a custom `heir-opt` pipeline
+### Optional: Run a custom `heir-opt` pipeline
 
 HEIR comes with two central binaries, `heir-opt` for running optimization passes
 and dialect conversions, and `heir-translate` for backend code generation. To
@@ -331,78 +404,4 @@ bazel run --noallow_analysis_cache_discard //tools:heir-opt -- \
 --secretize=entry-function=box_blur --wrap-generic --canonicalize --cse --full-loop-unroll \
 --insert-rotate --cse --canonicalize --collapse-insertion-chains \
 --canonicalize --cse /path/to/heir/tests/simd/box_blur_64x64.mlir
-```
-
-## Developing in HEIR
-
-We use [pre-commit](https://pre-commit.com/) to manage a series of git
-pre-commit hooks for the project; for example, each time you commit code, the
-hooks will make sure that your C++ is formatted properly. If your code isn't,
-the hook will format it, so when you try to commit the second time you'll get
-past the hook.
-
-All hooks are defined in `.pre-commit-config.yaml`. To install these hooks, run
-
-```bash
-pip install -r requirements-dev.txt
-```
-
-Then install the hooks to run automatically on `git commit`:
-
-```bash
-pre-commit install
-```
-
-To run them manually, run
-
-```bash
-pre-commit run --all-files
-```
-
-## Creating a New Pass
-
-The `scripts/templates` folder contains Python scripts to create boilerplate
-for new conversion or (dialect-specific) transform passes. These should be used
-when the tablegen files containing existing pass definitions in the expected
-filepaths are not already present. Otherwise, you should modify the existing
-tablegen files directly.
-
-### Conversion Pass
-
-To create a new conversion pass, run a command similar to the following:
-
-```
-python scripts/templates/templates.py new_conversion_pass \
---source_dialect_name=CGGI \
---source_dialect_namespace=cggi \
---source_dialect_mnemonic=cggi \
---target_dialect_name=TfheRust \
---target_dialect_namespace=tfhe_rust \
---target_dialect_mnemonic=tfhe_rust
-```
-
-In order to build the resulting code, you must fix the labeled `FIXME`s in the
-type converter and the op conversion patterns.
-
-### Transform Passes
-
-To create a transform or rewrite pass that operates on a dialect, run a command
-similar to the following:
-
-```
-python scripts/templates/templates.py new_dialect_transform \
---pass_name=ForgetSecrets \
---pass_flag=forget-secrets \
---dialect_name=Secret \
---dialect_namespace=secret \
---force=false
-```
-
-If the transform does not operate from and to a specific dialect, use
-
-```
-python scripts/templates/templates.py new_transform \
---pass_name=ForgetSecrets \
---pass_flag=forget-secrets \
---force=false
 ```

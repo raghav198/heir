@@ -1,6 +1,7 @@
 #include "lib/Dialect/LWE/IR/LWEDialect.h"
 
 #include <cstdint>
+#include <optional>
 
 #include "lib/Dialect/LWE/IR/LWEAttributes.h"
 #include "lib/Dialect/LWE/IR/LWEOps.h"
@@ -8,12 +9,14 @@
 #include "llvm/include/llvm/ADT/STLFunctionalExtras.h"  // from @llvm-project
 #include "llvm/include/llvm/ADT/TypeSwitch.h"           // from @llvm-project
 #include "llvm/include/llvm/Support/Casting.h"          // from @llvm-project
+#include "llvm/include/llvm/Support/ErrorHandling.h"    // from @llvm-project
 #include "mlir/include/mlir/Dialect/Polynomial/IR/PolynomialTypes.h"  // from @llvm-project
 #include "mlir/include/mlir/IR/Diagnostics.h"            // from @llvm-project
 #include "mlir/include/mlir/IR/DialectImplementation.h"  // from @llvm-project
 
 // Generated definitions
 #include "lib/Dialect/LWE/IR/LWEDialect.cpp.inc"
+#include "mlir/include/mlir/IR/Location.h"            // from @llvm-project
 #include "mlir/include/mlir/IR/Types.h"               // from @llvm-project
 #include "mlir/include/mlir/Support/LLVM.h"           // from @llvm-project
 #include "mlir/include/mlir/Support/LogicalResult.h"  // from @llvm-project
@@ -41,6 +44,34 @@ void LWEDialect::initialize() {
 #define GET_OP_LIST
 #include "lib/Dialect/LWE/IR/LWEOps.cpp.inc"
       >();
+}
+
+LogicalResult RMulOp::verify() {
+  auto x = getLhs().getType();
+  auto y = getRhs().getType();
+  if (x.getRlweParams().getDimension() != y.getRlweParams().getDimension()) {
+    return emitOpError() << "input dimensions do not match";
+  }
+  auto out = getOutput().getType();
+  if (out.getRlweParams().getDimension() !=
+      y.getRlweParams().getDimension() + x.getRlweParams().getDimension() - 1) {
+    return emitOpError() << "output.dim == x.dim + y.dim - 1 does not hold";
+  }
+  return success();
+}
+
+LogicalResult RMulOp::inferReturnTypes(
+    MLIRContext *ctx, std::optional<Location>, RMulOp::Adaptor adaptor,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  auto x = cast<lwe::RLWECiphertextType>(adaptor.getLhs().getType());
+  auto y = cast<lwe::RLWECiphertextType>(adaptor.getRhs().getType());
+  auto newDim =
+      x.getRlweParams().getDimension() + y.getRlweParams().getDimension() - 1;
+  inferredReturnTypes.push_back(lwe::RLWECiphertextType::get(
+      ctx, x.getEncoding(),
+      lwe::RLWEParamsAttr::get(ctx, newDim, x.getRlweParams().getRing()),
+      x.getUnderlyingType()));
+  return success();
 }
 
 LogicalResult BitFieldEncodingAttr::verifyEncoding(
@@ -174,6 +205,28 @@ LogicalResult ReinterpretUnderlyingTypeOp::verify() {
            << inputType << " and output type " << outputType;
   }
 
+  return success();
+}
+
+// Verification for RLWE_EncryptOp
+LogicalResult RLWEEncryptOp::verify() {
+  Type keyType = getKey().getType();
+  lwe::RLWEParamsAttr keyParams =
+      llvm::TypeSwitch<Type, lwe::RLWEParamsAttr>(keyType)
+          .Case<lwe::RLWEPublicKeyType, lwe::RLWESecretKeyType>(
+              [](auto key) { return key.getRlweParams(); })
+          .Default([](Type) {
+            llvm_unreachable("impossible by type constraints");
+            return nullptr;
+          });
+
+  lwe::RLWEParamsAttr outputParams = getOutput().getType().getRlweParams();
+  if (outputParams != keyParams) {
+    return emitOpError()
+           << "RLWEEncryptOp input dimensions do not match. Keyparams: "
+           << keyParams << ". Output ciphertext params: " << outputParams
+           << ".";
+  }
   return success();
 }
 
