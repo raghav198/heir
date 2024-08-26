@@ -1,5 +1,6 @@
 #include "lib/Transforms/MergeLUTs/SynthesizeArithmeticLut.h"
 #include <algorithm>
+#include <iterator>
 
 #include "ortools/constraint_solver/constraint_solver.h"
 #include "llvm/include/llvm/Support/Debug.h"
@@ -17,8 +18,14 @@ ArithmeticLut::ArithmeticLut(
     const std::vector<int>& coefficients,
     int lutSize) : coefficients(coefficients), lookupTable(0), lutSize(lutSize)
 {
-    std::set<int> oneSet(ones.begin(), ones.end());
-    std::set<int> zeroSet(zeros.begin(), zeros.end());
+    std::set<int> oneSet, zeroSet;
+    auto positivize = [&](int val) {
+        while (val < 0) val += lutSize;
+        return val % lutSize;
+    };
+    
+    std::transform(ones.begin(), ones.end(), std::inserter(oneSet, oneSet.begin()), positivize);
+    std::transform(zeros.begin(), zeros.end(), std::inserter(zeroSet, zeroSet.begin()), positivize);
 
     for (auto o : oneSet)
     {
@@ -54,9 +61,22 @@ std::vector<int> resolve(const std::vector<T *>& exprs)
         else
             resolved.push_back(t->Var()->Value());
     }
+    // LLVM_DEBUG({
+    //     llvm::dbgs() << "Resolved:\n";
+    //     for (auto x : resolved)
+    //         llvm::dbgs() << "- " << x << "\n";
+    // });
     return resolved;
 }
+template <class T>
+llvm::raw_ostream& operator<<(llvm::raw_ostream& os,
+                              const std::vector<T>& vec) {
+  os << "[";
+  for (auto t : vec) os << t;
+  os << "]";
 
+  return os;
+}
 mlir::FailureOr<ArithmeticLut> ArithmeticLutSynthesizer::doSynth(mlir::IntegerAttr lookupTable, int maxLutSize)
 {
 
@@ -70,7 +90,8 @@ mlir::FailureOr<ArithmeticLut> ArithmeticLutSynthesizer::doSynth(mlir::IntegerAt
     
 
     unsigned int arity = llvm::Log2_64(lookupTable.getType().getIntOrFloatBitWidth());
-    unsigned int tableValues = lookupTable.getUInt();
+    mlir::APInt tableValues = lookupTable.getValue();
+    // unsigned int tableValues = lookupTable.getUInt();
 
     LLVM_DEBUG({
         llvm::dbgs() << "\tArity: " << arity << "\n";
@@ -78,6 +99,7 @@ mlir::FailureOr<ArithmeticLut> ArithmeticLutSynthesizer::doSynth(mlir::IntegerAt
     });
 
     operations_research::Solver solver("solver");
+    auto *timeLimit = solver.MakeTimeLimit(absl::Milliseconds(1500));
     coefficientVars.reserve(arity);
     
     for (int i = 0; i < arity; i++) coefficientVars.push_back(solver.MakeIntVar(1 - maxLutSize, maxLutSize - 1));
@@ -94,15 +116,19 @@ mlir::FailureOr<ArithmeticLut> ArithmeticLutSynthesizer::doSynth(mlir::IntegerAt
 
         auto *output = solver.MakeScalProd(coefficientVars, input);
 
-        // llvm::dbgs() << "For input " << i << ", output is " << output->Var()->Value() << "\n";
+
+        // LLVM_DEBUG(llvm::dbgs() << "For input " << i << ", output is " << output->Var()->Value() << "\n");
 
         solver.AddConstraint(solver.MakeLess(output, maxLutSize));
         solver.AddConstraint(solver.MakeGreater(output, -maxLutSize));
 
-        if (tableValues & (1 << i)) ones.push_back(output);
+        bool expected = ((tableValues.ashr(i)) & 1).getBoolValue();
+        // LLVM_DEBUG(llvm::dbgs() << "For input " << input << ", output is " << expected << "\n");
+        
+        if (expected) ones.push_back(output);
         else zeros.push_back(output);
 
-        // llvm::dbgs() << "Expected output " << (tableValues & (1 << i)) << "\n";
+        // LLVM_DEBUG(llvm::dbgs() << "Expected output " << (tableValues & (1 << i)) << "\n");
     }
 
     for (auto *o : ones)
@@ -120,11 +146,12 @@ mlir::FailureOr<ArithmeticLut> ArithmeticLutSynthesizer::doSynth(mlir::IntegerAt
         coefficientVars, operations_research::Solver::CHOOSE_FIRST_UNBOUND, 
                                     operations_research::Solver::ASSIGN_MIN_VALUE);
 
-    solver.NewSearch(db);
+    solver.NewSearch(db, timeLimit);
     while (solver.NextSolution())
     {
         std::vector<int> coefficients = resolve(coefficientVars);
         LLVM_DEBUG(llvm::dbgs() << "\tSUCCESS\n");
+        std::reverse(coefficients.begin(), coefficients.end());
         return ArithmeticLut(resolve(ones), resolve(zeros), coefficients, maxLutSize);
     }
     solver.EndSearch();

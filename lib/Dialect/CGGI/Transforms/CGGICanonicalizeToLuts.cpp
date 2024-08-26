@@ -21,12 +21,12 @@ struct RewriteLutToLincomb : public OpRewritePattern<SourceLut> {
                                 PatternRewriter &rewriter) const override {
     if constexpr (std::is_same<SourceLut, cggi::Lut3Op>()) {
       rewriter.replaceOpWithNewOp<LutLinCombOp>(
-          op, op->getOperands(), rewriter.getDenseI32ArrayAttr({1, 2, 4}),
+          op, op->getOperands(), rewriter.getDenseI32ArrayAttr({4, 2, 1}),
           op.getLookupTable());
       return success();
     } else if constexpr (std::is_same<SourceLut, cggi::Lut2Op>()) {
       rewriter.replaceOpWithNewOp<LutLinCombOp>(
-          op, op->getOperands(), rewriter.getDenseI32ArrayAttr({1, 2}),
+          op, op->getOperands(), rewriter.getDenseI32ArrayAttr({2, 1}),
           op.getLookupTable());
       return success();
     }

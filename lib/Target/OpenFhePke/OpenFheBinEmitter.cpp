@@ -6,13 +6,62 @@
 #include "lib/Dialect/Openfhe/IR/OpenfheOps.h"
 #include "lib/Target/OpenFhePke/OpenFheUtils.h"
 #include "lib/Target/Utils.h"
-#include "llvm/ADT/TypeSwitch.h"                       // from @llvm-project
-#include "llvm/include/llvm/Support/FormatVariadic.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/include/mlir/Support/LLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Tools/mlir-translate/Translation.h"  // from @llvm-project
+#include "llvm/ADT/TypeSwitch.h"                       // from @llvm-project
+#include "llvm/include/llvm/Support/FormatVariadic.h"  // from @llvm-project
 
 namespace mlir::heir::openfhe {
+
+// clang-format off
+constexpr std::string_view prelude = R"cpp(
+#include <openfhe.h>  // from @openfhe
+
+#include <algorithm>
+#include <utility>
+#include <vector>
+
+using namespace lbcrypto;
+
+using BinFHEContextT = std::shared_ptr<BinFHEContext>;
+using LWESchemeT = std::shared_ptr<LWEEncryptionScheme>;
+
+constexpr int ptxt_mod = 8;
+
+std::vector<LWECiphertext> encrypt(BinFHEContextT cc, LWEPrivateKey sk,
+                                    int value) {
+  std::vector<lbcrypto::LWECiphertext> encrypted_bits;
+  for (int i = 0; i < 8; i++) {
+    int bit = (value & (1 << i)) >> i;
+    encrypted_bits.push_back(
+        cc->Encrypt(sk, bit, BINFHE_OUTPUT::SMALL_DIM, ptxt_mod));
+  }
+  return encrypted_bits;
+}
+
+int decrypt(BinFHEContextT cc, LWEPrivateKey sk,
+            std::vector<LWECiphertext> encrypted) {
+  int result = 0;
+
+  std::reverse(encrypted.begin(), encrypted.end());
+
+  for (LWECiphertext encrypted_bit : encrypted) {
+    LWEPlaintext bit;
+    cc->Decrypt(sk, encrypted_bit, &bit, ptxt_mod);
+    result *= 2;
+    result += bit;
+  }
+  return result;
+}
+
+LWECiphertext copy(LWECiphertext ctxt) {
+  LWECiphertext copied = std::make_shared<LWECiphertextImpl>(ctxt->GetA(), ctxt->GetB());
+  return copied;
+}
+
+)cpp";
+// clang-format on
 
 llvm::SmallVector<std::pair<int, int>> getIntervals(
     const llvm::ArrayRef<int> &values) {
@@ -53,11 +102,15 @@ LogicalResult translateToOpenFheBin(mlir::Operation *op,
 LogicalResult OpenFheBinEmitter::translate(Operation &operation) {
   LogicalResult status =
       llvm::TypeSwitch<Operation &, LogicalResult>(operation)
+          .Case<mlir::ModuleOp>(
+              [&](auto module) { return printOperation(module); })
           .Case<memref::LoadOp>([&](auto load) { return printOperation(load); })
           .Case<memref::StoreOp>(
               [&](auto store) { return printOperation(store); })
           .Case<memref::AllocOp>(
               [&](auto alloc) { return printOperation(alloc); })
+          .Case<openfhe::GetLWESchemeOp>(
+              [&](auto getScheme) { return printOperation(getScheme); })
           .Case<openfhe::LWEMulConstOp>(
               [&](auto mul) { return printOperation(mul); })
           .Case<openfhe::LWEAddOp>(
@@ -70,6 +123,16 @@ LogicalResult OpenFheBinEmitter::translate(Operation &operation) {
             return OpenFhePkeEmitter::translate(operation);
           });
   return status;
+}
+
+LogicalResult OpenFheBinEmitter::printOperation(mlir::ModuleOp module) {
+  os << prelude << "\n";
+  for (Operation &op : module) {
+    if (failed(translate(op))) {
+      return failure();
+    }
+  }
+  return success();
 }
 
 LogicalResult OpenFheBinEmitter::printOperation(memref::LoadOp load) {
@@ -98,10 +161,18 @@ LogicalResult OpenFheBinEmitter::printOperation(memref::AllocOp alloc) {
   return success();
 }
 
+LogicalResult OpenFheBinEmitter::printOperation(
+    openfhe::GetLWESchemeOp getScheme) {
+  auto cryptoContext = getScheme.getCryptoContext();
+  emitAutoAssignPrefix(getScheme.getResult());
+  os << variableNames->getNameForValue(cryptoContext) << "->GetLWEScheme();\n";
+  return success();
+}
+
 LogicalResult OpenFheBinEmitter::printOperation(openfhe::LWEMulConstOp mul) {
   return printInPlaceEvalMethod(mul.getResult(), mul.getCryptoContext(),
                                 {mul.getCiphertext(), mul.getConstant()},
-                                "EvalMulConstEq");
+                                "EvalMultConstEq");
 }
 
 LogicalResult OpenFheBinEmitter::printOperation(openfhe::LWEAddOp add) {
@@ -114,18 +185,15 @@ LogicalResult OpenFheBinEmitter::printOperation(openfhe::MakeLutOp makeLut) {
   emitAutoAssignPrefix(makeLut.getOutput());
 
   os << variableNames->getNameForValue(makeLut.getCryptoContext())
-     << ".GenerateLUTviaFunction([](auto m, auto p) {\n";
+     << "->GenerateLUTviaFunction([](NativeInteger m, NativeInteger p) -> NativeInteger {\n";
   os.indent();
-  for (auto [min, max] : getIntervals(makeLut.getValues())) {
-    if (min == max) {
-      os << "if (m == " << min << ") return 1;\n";
-    } else {
-      os << llvm::formatv("if ({0} <= m && m <= {1}) return 1;\n", min, max);
-    }
+  for (auto val : makeLut.getValues()) {
+    os << llvm::formatv("if (m == {0}) return 1;\n", val);
   }
+
   os << "return 0;\n";
   os.unindent();
-  os << "}, 8);\n";
+  os << "}, ptxt_mod);\n";
 
   return success();
 }
@@ -138,9 +206,10 @@ LogicalResult OpenFheBinEmitter::printOperation(openfhe::EvalFuncOp evalFunc) {
 LogicalResult OpenFheBinEmitter::printInPlaceEvalMethod(
     mlir::Value result, mlir::Value cryptoContext, mlir::ValueRange operands,
     std::string_view op) {
-  emitAutoAssignPrefix(result);
-  os << variableNames->getNameForValue(*operands.begin()) << ";\n";
-  os << variableNames->getNameForValue(result) << " = ";
+  if (failed(emitTypedAssignPrefix(result))) {
+    return failure();
+  }
+  os << "copy(" << variableNames->getNameForValue(*operands.begin()) << ");\n";
   os << variableNames->getNameForValue(cryptoContext) << "->" << op << "("
      << variableNames->getNameForValue(result) << ", ";
   os << commaSeparatedValues(

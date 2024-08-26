@@ -53,7 +53,7 @@ class Openfhe_lwe_BinaryOp<string mnemonic, list<Trait> traits = []>
     AllTypesMatch<["lhs", "rhs", "output"]>,
 ]>{
  let arguments = (ins
-    Openfhe_CryptoContext:$cryptoContext,
+    Openfhe_LWEScheme:$cryptoContext,
     LWECiphertext:$lhs,
     LWECiphertext:$rhs
   );
@@ -62,7 +62,7 @@ class Openfhe_lwe_BinaryOp<string mnemonic, list<Trait> traits = []>
 
 def MakeLutOp : Openfhe_Op<"make_lut", [Pure]> {
   let arguments = (ins
-    Openfhe_CryptoContext:$cryptoContext,
+    Openfhe_BinFHEContext:$cryptoContext,
     DenseI32ArrayAttr:$values
   );
   let results = (outs Openfhe_LUT:$output);
@@ -70,7 +70,7 @@ def MakeLutOp : Openfhe_Op<"make_lut", [Pure]> {
 
 def EvalFuncOp : Openfhe_Op<"eval_func", [Pure]> {
   let arguments = (ins
-    Openfhe_CryptoContext:$cryptoContext,
+    Openfhe_BinFHEContext:$cryptoContext,
     Openfhe_LUT:$lut,
     LWECiphertext:$input
   );
@@ -145,11 +145,19 @@ def LWEMulConstOp : Openfhe_Op<"lwe_mul_const",[
 ]> {
   let summary = "OpenFHE mul operation of an LWE ciphertext and a constant.";
   let arguments = (ins
-    Openfhe_CryptoContext:$cryptoContext,
+    Openfhe_LWEScheme:$cryptoContext,
     LWECiphertext:$ciphertext,
     I64:$constant
   );
   let results = (outs LWECiphertext:$output);
+}
+
+def GetLWESchemeOp : Openfhe_Op<"get_lwe_scheme", [Pure]> {
+  let summary = "Gets pointer to underlying LWE scheme.";
+  let arguments = (ins
+    Openfhe_BinFHEContext:$cryptoContext
+  );
+  let results = (outs Openfhe_LWEScheme:$scheme);
 }
 
 def NegateOp : Openfhe_UnaryOp<"negate"> { let summary = "OpenFHE negate operation of a ciphertext."; }

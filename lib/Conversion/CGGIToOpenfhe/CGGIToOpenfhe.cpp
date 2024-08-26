@@ -44,8 +44,8 @@ bool containsCGGIOps2(func::FuncOp func) {
 
 // FIXME: I stole these two from the BGVToOpenfhe conversion; is there a better
 // way to share code?
-struct AddCryptoContextArg : public OpConversionPattern<func::FuncOp> {
-  AddCryptoContextArg(mlir::MLIRContext *context)
+struct AddCryptoContextParam : public OpConversionPattern<func::FuncOp> {
+  AddCryptoContextParam(mlir::MLIRContext *context)
       : OpConversionPattern<func::FuncOp>(context, /* benefit= */ 2) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -57,7 +57,7 @@ struct AddCryptoContextArg : public OpConversionPattern<func::FuncOp> {
       return failure();
     }
 
-    auto cryptoContextType = openfhe::CryptoContextType::get(getContext());
+    auto cryptoContextType = openfhe::BinFHEContextType::get(getContext());
     FunctionType originalType = op.getFunctionType();
     llvm::SmallVector<Type, 4> newTypes;
     newTypes.reserve(originalType.getNumInputs() + 1);
@@ -86,13 +86,33 @@ FailureOr<Value> getContextualCryptoContext(Operation *op) {
                             .front()
                             .getArguments()
                             .front();
-  if (!mlir::isa<openfhe::CryptoContextType>(cryptoContext.getType())) {
+  if (!mlir::isa<openfhe::BinFHEContextType>(cryptoContext.getType())) {
     return op->emitOpError()
            << "Found CGGI op in a function without a public "
               "key argument. Did the AddCryptoContextArg pattern fail to run?";
   }
   return cryptoContext;
 }
+
+struct AddCryptoContextArg : public OpConversionPattern<func::CallOp> {
+  AddCryptoContextArg(mlir::MLIRContext *context)
+      : OpConversionPattern<func::CallOp>(context, /* benefit= */ 2) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      func::CallOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    rewriter.modifyOpInPlace(op, [&] {
+      auto result = getContextualCryptoContext(op);
+      if (failed(result)) return;
+      auto context = result.value();
+      op->insertOperands(0, {context});
+    });
+
+    return success();
+  }
+};
 
 struct ConvertLutLincombOp : public OpConversionPattern<cggi::LutLinCombOp> {
   ConvertLutLincombOp(mlir::MLIRContext *context)
@@ -114,10 +134,11 @@ struct ConvertLutLincombOp : public OpConversionPattern<cggi::LutLinCombOp> {
     preppedInputs.reserve(coefficients.size());
 
     mlir::ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    auto scheme = b.create<openfhe::GetLWESchemeOp>(cryptoContext).getResult();
 
     for (int i = 0; i < coefficients.size(); i++) {
       preppedInputs.push_back(b.create<openfhe::LWEMulConstOp>(
-          cryptoContext, inputs[i],
+          scheme, inputs[i],
           b.create<arith::ConstantOp>(b.getI64Type(),
                                       b.getI64IntegerAttr(coefficients[i]))
               .getResult()));
@@ -127,11 +148,10 @@ struct ConvertLutLincombOp : public OpConversionPattern<cggi::LutLinCombOp> {
 
     if (preppedInputs.size() > 1) {
       openfhe::LWEAddOp sum = b.create<openfhe::LWEAddOp>(
-          cryptoContext, preppedInputs[0].getResult(),
-          preppedInputs[1].getResult());
+          scheme, preppedInputs[0].getResult(), preppedInputs[1].getResult());
 
       for (int i = 2; i < preppedInputs.size(); i++) {
-        sum = b.create<openfhe::LWEAddOp>(cryptoContext, sum, preppedInputs[i]);
+        sum = b.create<openfhe::LWEAddOp>(scheme, sum, preppedInputs[i]);
       }
 
       lutInput = sum.getResult();
@@ -140,6 +160,19 @@ struct ConvertLutLincombOp : public OpConversionPattern<cggi::LutLinCombOp> {
     }
 
     // now create the LUT
+    // llvm::SmallSetVector<int, 8> lutBits;
+    // auto lutAttr = op.getLookupTableAttr();
+    // int width = coefficients.size();
+    // for (int i = 0; i < (1 << width); i++) {
+    //   int index = 0;
+    //   for (int j = 0; j < width; j++) {
+    //     index += ((i >> (width - 1 - j)) & 1) * coefficients[j];
+    //   }
+    //   while (index < 0) index += 8;
+    //   if ((lutAttr.getValue().getZExtValue() >> i) & 1) lutBits.insert(index
+    //   % 8);
+    // }
+
     llvm::SmallVector<int, 4> lutBits;
     auto lutAttr = op.getLookupTableAttr();
     int width = lutAttr.getValue().getBitWidth();
@@ -173,14 +206,22 @@ struct CGGIToOpenfhe : public impl::CGGIToOpenfheBase<CGGIToOpenfhe> {
     target.addIllegalOp<cggi::LutLinCombOp>();
     target.addDynamicallyLegalOp<func::FuncOp>([](func::FuncOp func) {
       bool hasCryptoContext = func.getFunctionType().getNumInputs() > 0 &&
-                              mlir::isa<openfhe::CryptoContextType>(
+                              mlir::isa<openfhe::BinFHEContextType>(
                                   *func.getFunctionType().getInputs().begin());
       return hasCryptoContext;
     });
 
-    // target.addIllegalDialect<cggi::CGGIDialect>();
-    patterns.add<AddCryptoContextArg, ConvertLutLincombOp>(typeConverter,
-                                                           context);
+    target.addDynamicallyLegalOp<func::CallOp>([](func::CallOp call) {
+          bool hasCryptoContext = !call.getArgOperands().empty() &&
+                                  mlir::isa<openfhe::BinFHEContextType>(
+                                      *call.getArgOperands().getType().begin());
+          return hasCryptoContext;
+        });
+
+        // target.addIllegalDialect<cggi::CGGIDialect>();
+        patterns
+        .add<AddCryptoContextParam, AddCryptoContextArg, ConvertLutLincombOp>(
+            typeConverter, context);
 
     if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
       return signalPassFailure();

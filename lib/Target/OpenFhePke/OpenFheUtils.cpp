@@ -23,6 +23,10 @@ FailureOr<std::string> convertType(Type type) {
       // For now, these types are defined in the prelude as aliases.
       .Case<CryptoContextType>(
           [&](auto ty) { return std::string("CryptoContextT"); })
+      .Case<BinFHEContextType>(
+        [&](auto ty) { return std::string("BinFHEContextT"); })
+      .Case<LWESchemeType>(
+        [&](auto ty) { return std::string("LWESchemeT"); })
       .Case<lwe::RLWECiphertextType>(
           [&](auto ty) { return std::string("CiphertextT"); })
       .Case<lwe::RLWEPlaintextType>(

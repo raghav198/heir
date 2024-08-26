@@ -30,9 +30,11 @@ class OpenFheBinEmitter : public OpenFhePkeEmitter {
   LogicalResult translate(::mlir::Operation &operation) override;
 
  private:
+  LogicalResult printOperation(mlir::ModuleOp module);
   LogicalResult printOperation(memref::LoadOp load);
   LogicalResult printOperation(memref::StoreOp store);
   LogicalResult printOperation(memref::AllocOp alloc);
+  LogicalResult printOperation(openfhe::GetLWESchemeOp getScheme);
   LogicalResult printOperation(openfhe::LWEMulConstOp mul);
   LogicalResult printOperation(openfhe::LWEAddOp add);
   LogicalResult printOperation(openfhe::MakeLutOp makeLut);

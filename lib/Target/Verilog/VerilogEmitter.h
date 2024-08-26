@@ -16,6 +16,7 @@
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/Math/IR/Math.h"      // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
+#include "mlir/include/mlir/Dialect/SCF/IR/SCF.h" // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinOps.h"             // from @llvm-project
 #include "mlir/include/mlir/IR/Operation.h"              // from @llvm-project
 #include "mlir/include/mlir/IR/Region.h"                 // from @llvm-project
@@ -111,6 +112,8 @@ class VerilogEmitter {
   LogicalResult printOperation(mlir::func::CallOp op);
   LogicalResult printOperation(mlir::math::CountLeadingZerosOp op);
   LogicalResult printOperation(mlir::memref::LoadOp op);
+  
+  LogicalResult printOperation(mlir::scf::IfOp op);
 
   // Helpers for above
   LogicalResult printBinaryOp(mlir::Value result, mlir::Value lhs,

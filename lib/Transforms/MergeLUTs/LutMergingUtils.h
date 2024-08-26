@@ -29,7 +29,7 @@ int composeLookupTables(
     const llvm::SmallVector<int>& sourceIdxs, int sourceLut, 
     const llvm::SmallVector<int>& destIdxs, int destLut);
 
-unsigned int getMergedLookupTable(comb::TruthTableOp user, comb::TruthTableOp lutToMerge, mlir::SetVector<Value> userInputs);
+mlir::APInt getMergedLookupTable(comb::TruthTableOp user, comb::TruthTableOp lutToMerge, mlir::SetVector<Value> userInputs);
 
 mlir::FailureOr<LutMergeResult> mergeLutsIfPossible(comb::TruthTableOp user, comb::TruthTableOp lutToMerge, mlir::OpBuilder &builder);
 
