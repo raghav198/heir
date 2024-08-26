@@ -1,5 +1,5 @@
-#ifndef HEIR_LIB_TARGET_VERILOG_VERILOGEMITTER_H_
-#define HEIR_LIB_TARGET_VERILOG_VERILOGEMITTER_H_
+#ifndef LIB_TARGET_VERILOG_VERILOGEMITTER_H_
+#define LIB_TARGET_VERILOG_VERILOGEMITTER_H_
 
 #include <cstdint>
 #include <optional>
@@ -110,6 +110,7 @@ class VerilogEmitter {
   LogicalResult printOperation(mlir::affine::AffineYieldOp op);
   LogicalResult printOperation(mlir::func::CallOp op);
   LogicalResult printOperation(mlir::math::CountLeadingZerosOp op);
+  LogicalResult printOperation(mlir::memref::StoreOp op);
   LogicalResult printOperation(mlir::memref::LoadOp op);
 
   // Helpers for above
@@ -143,4 +144,4 @@ class VerilogEmitter {
 }  // namespace heir
 }  // namespace mlir
 
-#endif  // HEIR_LIB_TARGET_VERILOG_VERILOGEMITTER_H_
+#endif  // LIB_TARGET_VERILOG_VERILOGEMITTER_H_

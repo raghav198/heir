@@ -2,10 +2,7 @@
 
 load("@heir//tests/openfhe/end_to_end:test.bzl", "openfhe_end_to_end_test")
 
-package(
-    default_applicable_licenses = ["@heir//:license"],
-    default_visibility = ["//visibility:public"],
-)
+package(default_applicable_licenses = ["@heir//:license"])
 
 openfhe_end_to_end_test(
     name = "binops_test",

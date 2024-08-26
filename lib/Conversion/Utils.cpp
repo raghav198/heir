@@ -4,6 +4,9 @@
 #include <cstdint>
 #include <memory>
 
+#include "lib/Dialect/LWE/IR/LWEAttributes.h"
+#include "llvm/include/llvm/ADT/TypeSwitch.h"         // from @llvm-project
+#include "llvm/include/llvm/Support/ErrorHandling.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
@@ -16,6 +19,7 @@
 #include "mlir/include/mlir/IR/OperationSupport.h"       // from @llvm-project
 #include "mlir/include/mlir/IR/PatternMatch.h"           // from @llvm-project
 #include "mlir/include/mlir/IR/Region.h"                 // from @llvm-project
+#include "mlir/include/mlir/IR/Visitors.h"               // from @llvm-project
 #include "mlir/include/mlir/Support/LLVM.h"              // from @llvm-project
 #include "mlir/include/mlir/Support/LogicalResult.h"     // from @llvm-project
 #include "mlir/include/mlir/Transforms/DialectConversion.h"  // from @llvm-project
@@ -27,47 +31,44 @@ using ::mlir::func::CallOp;
 using ::mlir::func::FuncOp;
 using ::mlir::func::ReturnOp;
 
-struct ConvertAny : public ConversionPattern {
-  ConvertAny(const TypeConverter &typeConverter, MLIRContext *context)
-      : ConversionPattern(typeConverter, RewritePattern::MatchAnyOpTypeTag(),
-                          /*benefit=*/1, context) {
-    setDebugName("ConvertAny");
-    setHasBoundedRewriteRecursion(true);
+ConvertAny::ConvertAny(const TypeConverter &anyTypeConverter,
+                       MLIRContext *context)
+    : ConversionPattern(anyTypeConverter, RewritePattern::MatchAnyOpTypeTag(),
+                        /*benefit=*/1, context) {
+  setDebugName("ConvertAny");
+  setHasBoundedRewriteRecursion(true);
+}
+
+LogicalResult ConvertAny::matchAndRewrite(
+    Operation *op, ArrayRef<Value> operands,
+    ConversionPatternRewriter &rewriter) const {
+  SmallVector<Type> newOperandTypes;
+  if (failed(getTypeConverter()->convertTypes(op->getOperandTypes(),
+                                              newOperandTypes)))
+    return failure();
+
+  SmallVector<Type> newResultTypes;
+  if (failed(getTypeConverter()->convertTypes(op->getResultTypes(),
+                                              newResultTypes)))
+    return failure();
+
+  SmallVector<std::unique_ptr<Region>, 1> regions;
+  IRMapping mapping;
+  for (auto &r : op->getRegions()) {
+    Region *newRegion = new Region(op);
+    rewriter.cloneRegionBefore(r, *newRegion, newRegion->end(), mapping);
+    if (failed(rewriter.convertRegionTypes(newRegion, *this->typeConverter)))
+      return failure();
+    regions.emplace_back(newRegion);
   }
 
-  // generate a new op where all operands have been replaced with their
-  // materialized/typeconverted versions
-  LogicalResult matchAndRewrite(
-      Operation *op, ArrayRef<Value> operands,
-      ConversionPatternRewriter &rewriter) const override {
-    SmallVector<Type> newOperandTypes;
-    if (failed(getTypeConverter()->convertTypes(op->getOperandTypes(),
-                                                newOperandTypes)))
-      return failure();
+  Operation *newOp = rewriter.create(OperationState(
+      op->getLoc(), op->getName().getStringRef(), operands, newResultTypes,
+      op->getAttrs(), op->getSuccessors(), regions));
 
-    SmallVector<Type> newResultTypes;
-    if (failed(getTypeConverter()->convertTypes(op->getResultTypes(),
-                                                newResultTypes)))
-      return failure();
-
-    SmallVector<std::unique_ptr<Region>, 1> regions;
-    IRMapping mapping;
-    for (auto &r : op->getRegions()) {
-      Region *newRegion = new Region();
-      rewriter.cloneRegionBefore(r, *newRegion, newRegion->end(), mapping);
-      if (failed(rewriter.convertRegionTypes(newRegion, *this->typeConverter)))
-        return failure();
-      regions.emplace_back(newRegion);
-    }
-
-    Operation *newOp = rewriter.create(OperationState(
-        op->getLoc(), op->getName().getStringRef(), operands, newResultTypes,
-        op->getAttrs(), op->getSuccessors(), regions));
-
-    rewriter.replaceOp(op, newOp);
-    return success();
-  }
-};
+  rewriter.replaceOp(op, newOp);
+  return success();
+}
 
 struct ConvertExtract : public OpConversionPattern<tensor::ExtractOp> {
   ConvertExtract(mlir::MLIRContext *context)
@@ -280,6 +281,16 @@ void addStructuralConversionPatterns(TypeConverter &typeConverter,
 
   scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns,
                                                        target);
+}
+
+int widthFromEncodingAttr(Attribute encoding) {
+  return llvm::TypeSwitch<Attribute, int>(encoding)
+      .Case<lwe::BitFieldEncodingAttr, lwe::UnspecifiedBitFieldEncodingAttr>(
+          [](auto attr) -> int { return attr.getCleartextBitwidth(); })
+      .Default([](Attribute attr) -> int {
+        llvm_unreachable("Unsupported encoding attribute");
+        return 0;
+      });
 }
 
 }  // namespace heir

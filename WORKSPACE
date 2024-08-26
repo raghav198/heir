@@ -241,6 +241,13 @@ git_repository(
     remote = "https://github.com/abseil/abseil-cpp.git",
 )
 
+## Abseil-py
+new_git_repository(
+    name = "com_google_absl_py",
+    commit = "127c98870edf5f03395ce9cf886266fa5f24455e",  # v1.4.0
+    remote = "https://github.com/abseil/abseil-py",
+)
+
 ## Protobuf
 git_repository(
     name = "com_google_protobuf",
@@ -333,7 +340,7 @@ git_repository(
 git_repository(
     name = "rapidjson",
     build_file = "//bazel/openfhe:rapidjson.BUILD",
-    commit = "f54b0e47a08782a6131cc3d60f94d038fa6e0a51",
+    commit = "9bd618f545ab647e2c3bcbf2f1d87423d6edf800",
     remote = "https://github.com/Tencent/rapidjson.git",
 )
 

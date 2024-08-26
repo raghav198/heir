@@ -45,6 +45,7 @@ class OpenFhePkeEmitter {
   // Functions for printing individual ops
   LogicalResult printOperation(::mlir::ModuleOp op);
   LogicalResult printOperation(::mlir::arith::ConstantOp op);
+  LogicalResult printOperation(::mlir::arith::ExtSIOp op);
   LogicalResult printOperation(::mlir::arith::IndexCastOp op);
   LogicalResult printOperation(::mlir::func::FuncOp op);
   LogicalResult printOperation(::mlir::func::ReturnOp op);
@@ -56,6 +57,10 @@ class OpenFhePkeEmitter {
   LogicalResult printOperation(AutomorphOp op);
   LogicalResult printOperation(DecryptOp op);
   LogicalResult printOperation(EncryptOp op);
+  LogicalResult printOperation(GenParamsOp op);
+  LogicalResult printOperation(GenContextOp op);
+  LogicalResult printOperation(GenMulKeyOp op);
+  LogicalResult printOperation(GenRotKeyOp op);
   LogicalResult printOperation(KeySwitchOp op);
   LogicalResult printOperation(LevelReduceOp op);
   LogicalResult printOperation(ModReduceOp op);

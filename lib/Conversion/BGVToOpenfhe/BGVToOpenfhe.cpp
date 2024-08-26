@@ -48,7 +48,8 @@ class ToOpenfheTypeConverter : public TypeConverter {
 
 bool containsBGVOps(func::FuncOp func) {
   auto walkResult = func.walk([&](Operation *op) {
-    if (llvm::isa<bgv::BGVDialect>(op->getDialect()))
+    if (llvm::isa<bgv::BGVDialect>(op->getDialect()) ||
+        llvm::isa<lwe::RLWEEncryptOp>(op) || llvm::isa<lwe::RLWEDecryptOp>(op))
       return WalkResult::interrupt();
     return WalkResult::advance();
   });
@@ -140,7 +141,7 @@ struct ConvertBinOp : public OpConversionPattern<BinOp> {
   }
 };
 
-using ConvertNegateOp = ConvertUnaryOp<Negate, openfhe::NegateOp>;
+using ConvertNegateOp = ConvertUnaryOp<NegateOp, openfhe::NegateOp>;
 
 using ConvertAddOp = ConvertBinOp<AddOp, openfhe::AddOp>;
 using ConvertSubOp = ConvertBinOp<SubOp, openfhe::SubOp>;
@@ -180,29 +181,9 @@ struct ConvertRotateOp : public OpConversionPattern<RotateOp> {
     if (failed(result)) return result;
 
     Value cryptoContext = result.value();
-    Value castOffset =
-        llvm::TypeSwitch<Type, Value>(adaptor.getOffset().getType())
-            .Case<IndexType>([&](auto ty) {
-              return rewriter
-                  .create<arith::IndexCastOp>(
-                      op.getLoc(), rewriter.getI64Type(), adaptor.getOffset())
-                  .getResult();
-            })
-            .Case<IntegerType>([&](IntegerType ty) {
-              if (ty.getWidth() < 64) {
-                return rewriter
-                    .create<arith::ExtUIOp>(op.getLoc(), rewriter.getI64Type(),
-                                            adaptor.getOffset())
-                    .getResult();
-              }
-              return rewriter
-                  .create<arith::TruncIOp>(op.getLoc(), rewriter.getI64Type(),
-                                           adaptor.getOffset())
-                  .getResult();
-            });
-    rewriter.replaceOp(
-        op, rewriter.create<openfhe::RotOp>(op.getLoc(), cryptoContext,
-                                            adaptor.getInput(), castOffset));
+    rewriter.replaceOp(op, rewriter.create<openfhe::RotOp>(
+                               op.getLoc(), cryptoContext, adaptor.getInput(),
+                               adaptor.getOffset()));
     return success();
   }
 };
@@ -212,14 +193,14 @@ bool checkRelinToBasis(llvm::ArrayRef<int> toBasis) {
   return toBasis[0] == 0 && toBasis[1] == 1;
 }
 
-struct ConvertRelinOp : public OpConversionPattern<Relinearize> {
+struct ConvertRelinOp : public OpConversionPattern<RelinearizeOp> {
   ConvertRelinOp(mlir::MLIRContext *context)
-      : OpConversionPattern<Relinearize>(context) {}
+      : OpConversionPattern<RelinearizeOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      Relinearize op, OpAdaptor adaptor,
+      RelinearizeOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     FailureOr<Value> result = getContextualCryptoContext(op.getOperation());
     if (failed(result)) return result;
@@ -241,14 +222,14 @@ struct ConvertRelinOp : public OpConversionPattern<Relinearize> {
   }
 };
 
-struct ConvertModulusSwitchOp : public OpConversionPattern<ModulusSwitch> {
+struct ConvertModulusSwitchOp : public OpConversionPattern<ModulusSwitchOp> {
   ConvertModulusSwitchOp(mlir::MLIRContext *context)
-      : OpConversionPattern<ModulusSwitch>(context) {}
+      : OpConversionPattern<ModulusSwitchOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      ModulusSwitch op, OpAdaptor adaptor,
+      ModulusSwitchOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     FailureOr<Value> result = getContextualCryptoContext(op.getOperation());
     if (failed(result)) return result;
@@ -261,14 +242,14 @@ struct ConvertModulusSwitchOp : public OpConversionPattern<ModulusSwitch> {
   }
 };
 
-struct ConvertEncryptOp : public OpConversionPattern<EncryptOp> {
+struct ConvertEncryptOp : public OpConversionPattern<lwe::RLWEEncryptOp> {
   ConvertEncryptOp(mlir::MLIRContext *context)
-      : OpConversionPattern<EncryptOp>(context) {}
+      : OpConversionPattern<lwe::RLWEEncryptOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      EncryptOp op, OpAdaptor adaptor,
+      lwe::RLWEEncryptOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     FailureOr<Value> result = getContextualCryptoContext(op.getOperation());
     if (failed(result)) return result;
@@ -287,14 +268,14 @@ struct ConvertEncryptOp : public OpConversionPattern<EncryptOp> {
   }
 };
 
-struct ConvertDecryptOp : public OpConversionPattern<DecryptOp> {
+struct ConvertDecryptOp : public OpConversionPattern<lwe::RLWEDecryptOp> {
   ConvertDecryptOp(mlir::MLIRContext *context)
-      : OpConversionPattern<DecryptOp>(context) {}
+      : OpConversionPattern<lwe::RLWEDecryptOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      DecryptOp op, OpAdaptor adaptor,
+      lwe::RLWEDecryptOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     FailureOr<Value> result = getContextualCryptoContext(op.getOperation());
     if (failed(result)) return result;
@@ -376,7 +357,7 @@ struct ConvertExtractOp : public OpConversionPattern<ExtractOp> {
     auto plainMul =
         b.create<bgv::MulPlainOp>(adaptor.getInput(), oneHotPlaintext)
             .getResult();
-    auto rotated = b.create<bgv::RotateOp>(plainMul, adaptor.getOffset());
+    auto rotated = b.create<bgv::RotateOp>(plainMul, offsetAttr);
     // It might make sense to move this op to the add-client-interface pass,
     // but it also seems like an implementation detail of OpenFHE, and not part
     // of BGV generally.
@@ -384,6 +365,41 @@ struct ConvertExtractOp : public OpConversionPattern<ExtractOp> {
                        op.getOutput().getType(), rotated.getResult())
                       .getResult();
     rewriter.replaceOp(op, recast);
+    return success();
+  }
+};
+
+struct ConvertEncodeOp : public OpConversionPattern<lwe::RLWEEncodeOp> {
+  using OpConversionPattern<lwe::RLWEEncodeOp>::OpConversionPattern;
+
+  // OpenFHE has a convention that all inputs to MakePackedPlaintext are
+  // std::vector<int64_t>, so we need to cast the input to that type.
+  LogicalResult matchAndRewrite(
+      lwe::RLWEEncodeOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    auto tensorTy =
+        mlir::dyn_cast<RankedTensorType>(adaptor.getInput().getType());
+    // TODO(#646): support scalar inputs to encode.
+    if (!tensorTy) return op.emitOpError() << "Unsupported input type";
+
+    auto elementTy = tensorTy.getElementType();
+    auto intTy = mlir::dyn_cast<IntegerType>(elementTy);
+    if (!intTy)
+      return op.emitOpError() << "Input element type must be an integer type";
+
+    if (intTy.getWidth() >= 64)
+      return op.emitError() << "No supported packing technique for integers "
+                               "bigger than 64 bits.";
+
+    auto int64Ty = rewriter.getIntegerType(64);
+    auto newTensorTy = RankedTensorType::get(tensorTy.getShape(), int64Ty);
+    auto castedInput = rewriter.create<arith::ExtSIOp>(op.getLoc(), newTensorTy,
+                                                       adaptor.getInput());
+
+    rewriter.replaceOpWithNewOp<lwe::RLWEEncodeOp>(
+        op, op.getType(), castedInput, adaptor.getEncoding(),
+        adaptor.getRing());
+
     return success();
   }
 };
@@ -397,6 +413,7 @@ struct BGVToOpenfhe : public impl::BGVToOpenfheBase<BGVToOpenfhe> {
     ConversionTarget target(*context);
     target.addLegalDialect<openfhe::OpenfheDialect>();
     target.addIllegalDialect<bgv::BGVDialect>();
+    target.addIllegalOp<lwe::RLWEEncryptOp, lwe::RLWEDecryptOp>();
 
     RewritePatternSet patterns(context);
     addStructuralConversionPatterns(typeConverter, patterns, target);
@@ -409,10 +426,22 @@ struct BGVToOpenfhe : public impl::BGVToOpenfheBase<BGVToOpenfhe> {
              typeConverter.isLegal(&op.getBody()) &&
              (!containsBGVOps(op) || hasCryptoContextArg);
     });
+
+    target.addDynamicallyLegalOp<lwe::RLWEEncodeOp>([](lwe::RLWEEncodeOp op) {
+      if (auto tensorType =
+              mlir::dyn_cast<RankedTensorType>(op.getInput().getType())) {
+        if (auto intType =
+                mlir::dyn_cast<IntegerType>(tensorType.getElementType())) {
+          return intType.getWidth() == 64;
+        }
+      }
+      return false;
+    });
     patterns.add<AddCryptoContextArg, ConvertAddOp, ConvertSubOp, ConvertMulOp,
                  ConvertMulPlainOp, ConvertNegateOp, ConvertRotateOp,
                  ConvertRelinOp, ConvertModulusSwitchOp, ConvertExtractOp,
-                 ConvertEncryptOp, ConvertDecryptOp>(typeConverter, context);
+                 ConvertEncryptOp, ConvertDecryptOp, ConvertEncodeOp>(
+        typeConverter, context);
 
     if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
       return signalPassFailure();
