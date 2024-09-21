@@ -19,7 +19,6 @@ cc_library(
     deps = [
         ":dialect_inc_gen",
         ":ops_inc_gen",
-        "@heir//lib/Dialect:FHEHelpers",
         "@heir//lib/Dialect/LWE/IR:Dialect",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",

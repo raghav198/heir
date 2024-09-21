@@ -1,10 +1,9 @@
-#ifndef LIB_DIALECT_CGGI_IR_CGGIDIALECT_TD_
-#define LIB_DIALECT_CGGI_IR_CGGIDIALECT_TD_
+#ifndef HEIR_LIB_DIALECT_CGGI_IR_CGGIDIALECT_TD_
+#define HEIR_LIB_DIALECT_CGGI_IR_CGGIDIALECT_TD_
 
 include "mlir/IR/DialectBase.td"
 include "mlir/IR/OpBase.td"
-include "mlir/IR/CommonAttrConstraints.td"
-
+include "mlir/IR/CommonTypeConstraints.td"
 
 def CGGI_Dialect : Dialect {
   let name = "cggi";
@@ -13,4 +12,4 @@ def CGGI_Dialect : Dialect {
   let useDefaultAttributePrinterParser = 1;
 }
 
-#endif  // LIB_DIALECT_CGGI_IR_CGGIDIALECT_TD_
+#endif  // HEIR_LIB_DIALECT_CGGI_IR_CGGIDIALECT_TD_

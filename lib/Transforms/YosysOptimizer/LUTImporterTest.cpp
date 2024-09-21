@@ -1,6 +1,5 @@
 #include <cstddef>
 #include <memory>
-#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -65,8 +64,8 @@ class LUTImporterTestFixture : public Test {
 
     auto topologicalOrder = getTopologicalOrder(cellOrder);
     Yosys::RTLIL::Design *design = Yosys::yosys_get_design();
-    auto func = lutImporter.importModule(design->top_module(), topologicalOrder,
-                                         std::nullopt);
+    auto func =
+        lutImporter.importModule(design->top_module(), topologicalOrder);
     module_->push_back(func);
     return func;
   }

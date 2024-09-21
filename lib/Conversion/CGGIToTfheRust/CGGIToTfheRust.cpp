@@ -5,6 +5,7 @@
 #include "lib/Conversion/Utils.h"
 #include "lib/Dialect/CGGI/IR/CGGIDialect.h"
 #include "lib/Dialect/CGGI/IR/CGGIOps.h"
+#include "lib/Dialect/LWE/IR/LWEAttributes.h"
 #include "lib/Dialect/LWE/IR/LWEDialect.h"
 #include "lib/Dialect/LWE/IR/LWEOps.h"
 #include "lib/Dialect/LWE/IR/LWETypes.h"
@@ -12,6 +13,7 @@
 #include "lib/Dialect/TfheRust/IR/TfheRustOps.h"
 #include "lib/Dialect/TfheRust/IR/TfheRustTypes.h"
 #include "llvm/include/llvm/ADT/SmallVector.h"           // from @llvm-project
+#include "llvm/include/llvm/ADT/TypeSwitch.h"            // from @llvm-project
 #include "llvm/include/llvm/Support/Casting.h"           // from @llvm-project
 #include "llvm/include/llvm/Support/ErrorHandling.h"     // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"    // from @llvm-project
@@ -68,6 +70,20 @@ Type encrytpedUIntTypeFromWidth(MLIRContext *ctx, int width) {
     default:
       llvm_unreachable("Unsupported bitwidth");
   }
+}
+
+// Seems like this would be better as a method on the
+// LWE_EncodingAttrWithScalingFactor class, but I still have the problem of the
+// type returned by getEncoding being a vanilla Attribute. Probably we need a
+// common interface for LWE_EncodingAttrWithScalingFactor, and cast to that?
+int widthFromEncodingAttr(Attribute encoding) {
+  return llvm::TypeSwitch<Attribute, int>(encoding)
+      .Case<lwe::BitFieldEncodingAttr, lwe::UnspecifiedBitFieldEncodingAttr>(
+          [](auto attr) -> int { return attr.getCleartextBitwidth(); })
+      .Default([](Attribute attr) -> int {
+        llvm_unreachable("Unsupported encoding attribute");
+        return 0;
+      });
 }
 
 class CGGIToTfheRustTypeConverter : public TypeConverter {

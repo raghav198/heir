@@ -6,7 +6,6 @@
 #include "lib/Analysis/SelectVariableNames/SelectVariableNames.h"
 #include "lib/Dialect/LWE/IR/LWEOps.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheOps.h"
-#include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinOps.h"            // from @llvm-project
@@ -17,6 +16,7 @@
 #include "mlir/include/mlir/Support/IndentedOstream.h"  // from @llvm-project
 #include "mlir/include/mlir/Support/LLVM.h"             // from @llvm-project
 #include "mlir/include/mlir/Support/LogicalResult.h"    // from @llvm-project
+#include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
 
 namespace mlir {
 namespace heir {
@@ -32,9 +32,9 @@ class OpenFhePkeEmitter {
  public:
   OpenFhePkeEmitter(raw_ostream &os, SelectVariableNames *variableNames);
 
-  LogicalResult translate(::mlir::Operation &operation);
+  virtual LogicalResult translate(::mlir::Operation &operation);
 
- private:
+ protected:
   /// Output stream to emit to.
   raw_indented_ostream os;
 
@@ -45,7 +45,6 @@ class OpenFhePkeEmitter {
   // Functions for printing individual ops
   LogicalResult printOperation(::mlir::ModuleOp op);
   LogicalResult printOperation(::mlir::arith::ConstantOp op);
-  LogicalResult printOperation(::mlir::arith::ExtSIOp op);
   LogicalResult printOperation(::mlir::arith::IndexCastOp op);
   LogicalResult printOperation(::mlir::func::FuncOp op);
   LogicalResult printOperation(::mlir::func::ReturnOp op);
@@ -57,10 +56,6 @@ class OpenFhePkeEmitter {
   LogicalResult printOperation(AutomorphOp op);
   LogicalResult printOperation(DecryptOp op);
   LogicalResult printOperation(EncryptOp op);
-  LogicalResult printOperation(GenParamsOp op);
-  LogicalResult printOperation(GenContextOp op);
-  LogicalResult printOperation(GenMulKeyOp op);
-  LogicalResult printOperation(GenRotKeyOp op);
   LogicalResult printOperation(KeySwitchOp op);
   LogicalResult printOperation(LevelReduceOp op);
   LogicalResult printOperation(ModReduceOp op);

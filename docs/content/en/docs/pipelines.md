@@ -1,7 +1,7 @@
 <!-- mdformat off(yaml frontmatter) -->
 ---
 title: Pipelines
-weight: 60
+weight: 9
 ---
 <!-- mdformat on -->
 

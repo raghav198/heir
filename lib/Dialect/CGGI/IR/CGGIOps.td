@@ -1,16 +1,14 @@
-#ifndef LIB_DIALECT_CGGI_IR_CGGIOPS_TD_
-#define LIB_DIALECT_CGGI_IR_CGGIOPS_TD_
+#ifndef HEIR_LIB_DIALECT_CGGI_IR_CGGIOPS_TD_
+#define HEIR_LIB_DIALECT_CGGI_IR_CGGIOPS_TD_
 
 include "lib/Dialect/HEIRInterfaces.td"
 include "lib/Dialect/CGGI/IR/CGGIDialect.td"
-include "lib/Dialect/CGGI/IR/CGGIAttributes.td"
 
 include "mlir/Dialect/Polynomial/IR/PolynomialAttributes.td"
 include "lib/Dialect/LWE/IR/LWETypes.td"
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/BuiltinAttributes.td"
-include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -59,19 +57,6 @@ def CGGI_NotOp : CGGI_Op<"not", [
   let summary = "Logical NOT of two ciphertexts";
 }
 
-def CGGI_PackedOp : CGGI_Op<"packed_gates", [
-    Pure,
-    SameOperandsAndResultType
-]> {
-  let arguments = (ins
-    CGGIGate_Attr:$gates,
-    LWECiphertextLike:$lhs,
-    LWECiphertextLike:$rhs
-  );
-
-  let results = (outs LWECiphertextLike:$output);
-}
-
 class CGGI_LutOp<string mnemonic, list<Trait> traits = []>
   : CGGI_Op<mnemonic, traits # [
   Pure,
@@ -104,14 +89,12 @@ class CGGI_LutOp<string mnemonic, list<Trait> traits = []>
 def CGGI_Lut2Op : CGGI_LutOp<"lut2", [AllTypesMatch<["a", "b", "output"]>]> {
   let summary = "A lookup table on two inputs.";
   let arguments = (ins LWECiphertextLike:$b, LWECiphertextLike:$a, Builtin_IntegerAttr:$lookup_table);
-  let hasCanonicalizeMethod = 1;
 }
 
 def CGGI_Lut3Op : CGGI_LutOp<"lut3", [AllTypesMatch<["a", "b", "c", "output"]>]> {
   let summary = "A lookup table on three inputs.";
   let arguments = (ins LWECiphertextLike:$c, LWECiphertextLike:$b, LWECiphertextLike:$a, Builtin_IntegerAttr:$lookup_table);
   let results = (outs LWECiphertextLike:$output);
-  let hasCanonicalizeMethod = 1;
 }
 
 def CGGI_LutLinCombOp : CGGI_Op<"lut_lincomb", [
@@ -160,57 +143,4 @@ def CGGI_LutLinCombOp : CGGI_Op<"lut_lincomb", [
   let hasVerifier = 1;
 }
 
-def CGGI_MultiLutLinCombOp : CGGI_Op<"multi_lut_lincomb", [
-  Pure,
-  Commutative,
-  ElementwiseMappable,
-  Scalarizable
-]> {
-  let summary = "A multi-output version of lut_lincomb with one LUT per output.";
-  let description = [{
-    An op representing multiple lookup tables applied to a shared input, which
-    is prepared via a static linear combination. This is equivalent to
-    `cggi.lut_lincomb`, but where the linear combination is given to multiple
-    lookup tables, each producing a separate output.
-
-    This can be achieved by a special implementation of blind rotate in the CGGI
-    scheme. See [AutoHoG](https://ieeexplore.ieee.org/document/10413195).
-
-    Example:
-
-    ```mlir
-    #encoding = #lwe.bit_field_encoding<cleartext_start=30, cleartext_bitwidth=3>
-    #params = #lwe.lwe_params<cmod=7917, dimension=4>
-    !ciphertext = !lwe.lwe_ciphertext<encoding = #encoding, lwe_params = #params>
-
-    %4 = cggi.multi_lut_lincomb %c0, %c1, %c2, %c3 {
-        coefficients = array<i32: 1, 2, 3, 2>,
-        lookup_tables = array<index: 68, 70, 4, 8>
-    } : (!ciphertext, !ciphertext, !ciphertext, !ciphertext) -> (!ciphertext, !ciphertext, !ciphertext, !ciphertext)
-    ```
-
-    Represents applying the following LUTs. Performance-wise, this is
-    comparable to applying a single LUT to a linear combination.
-
-    ```
-    x = (1 * c0 + 2 * c1 + 3 * c2 + 2 * c3)
-    return (
-      (68 >> x) & 1,
-      (70 >> x) & 1,
-      (4 >> x) & 1,
-      (8 >> x) & 1
-    )
-    ```
-  }];
-
-  let arguments = (ins
-    Variadic<LWECiphertext>:$inputs,
-    DenseI32ArrayAttr:$coefficients,
-    DenseI32ArrayAttr:$lookup_tables
-  );
-  let results = (outs Variadic<LWECiphertext>:$outputs);
-  let assemblyFormat = "operands attr-dict `:` functional-type($inputs, $outputs)" ;
-  let hasVerifier = 1;
-}
-
-#endif  // LIB_DIALECT_CGGI_IR_CGGIOPS_TD_
+#endif  // HEIR_LIB_DIALECT_CGGI_IR_CGGIOPS_TD_

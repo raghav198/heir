@@ -1,7 +1,7 @@
 <!-- mdformat off(yaml frontmatter) -->
 ---
 title: Tutorials and Talks
-weight: 40
+weight: 10
 ---
 <!-- mdformat on -->
 

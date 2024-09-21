@@ -19,10 +19,6 @@ template <typename ConcreteType>
 class PassByReference
     : public TypeTrait::TraitBase<ConcreteType, PassByReference> {};
 
-template <typename ConcreteType>
-class EncryptedInteger
-    : public TypeTrait::TraitBase<ConcreteType, EncryptedInteger> {};
-
 }  // namespace tfhe_rust
 }  // namespace heir
 }  // namespace mlir

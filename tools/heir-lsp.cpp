@@ -1,10 +1,10 @@
+#include "lib/Dialect/ArithExt/IR/ArithExtDialect.h"
 #include "lib/Dialect/BGV/IR/BGVDialect.h"
 #include "lib/Dialect/CGGI/IR/CGGIDialect.h"
 #include "lib/Dialect/Comb/IR/CombDialect.h"
 #include "lib/Dialect/LWE/IR/LWEDialect.h"
-#include "lib/Dialect/ModArith/IR/ModArithDialect.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheDialect.h"
-#include "lib/Dialect/Random/IR/RandomDialect.h"
+#include "lib/Dialect/PolyExt/IR/PolyExtDialect.h"
 #include "lib/Dialect/Secret/IR/SecretDialect.h"
 #include "lib/Dialect/TensorExt/IR/TensorExtDialect.h"
 #include "lib/Dialect/TfheRust/IR/TfheRustDialect.h"
@@ -27,12 +27,12 @@ using namespace heir;
 int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
 
-  registry.insert<mod_arith::ModArithDialect>();
+  registry.insert<arith_ext::ArithExtDialect>();
   registry.insert<bgv::BGVDialect>();
   registry.insert<comb::CombDialect>();
   registry.insert<lwe::LWEDialect>();
   registry.insert<cggi::CGGIDialect>();
-  registry.insert<random::RandomDialect>();
+  registry.insert<poly_ext::PolyExtDialect>();
   registry.insert<secret::SecretDialect>();
   registry.insert<tfhe_rust::TfheRustDialect>();
   registry.insert<tfhe_rust_bool::TfheRustBoolDialect>();

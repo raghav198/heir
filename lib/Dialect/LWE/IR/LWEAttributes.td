@@ -1,5 +1,5 @@
-#ifndef LIB_DIALECT_LWE_IR_LWEATTRIBUTES_TD_
-#define LIB_DIALECT_LWE_IR_LWEATTRIBUTES_TD_
+#ifndef HEIR_LIB_DIALECT_LWE_IR_LWEATTRIBUTES_TD_
+#define HEIR_LIB_DIALECT_LWE_IR_LWEATTRIBUTES_TD_
 
 include "lib/Dialect/LWE/IR/LWEDialect.td"
 
@@ -320,4 +320,4 @@ def LWE_RLWEParams : AttrDef<LWE_Dialect, "RLWEParams"> {
   let assemblyFormat = "`<` struct(params) `>`";
 }
 
-#endif  // LIB_DIALECT_LWE_IR_LWEATTRIBUTES_TD_
+#endif  // HEIR_LIB_DIALECT_LWE_IR_LWEATTRIBUTES_TD_

@@ -116,7 +116,7 @@ bool tryVectorizeBlock(Block *block, Dialect *dialect) {
           {static_cast<int64_t>(bucket.size())}, elementType);
 
       SmallVector<Value, 4> vectorizedOperands;
-      for (uint operandIndex = 0; operandIndex < key->getNumOperands();
+      for (int operandIndex = 0; operandIndex < key->getNumOperands();
            ++operandIndex) {
         SmallVector<Value, 4> operands;
         operands.reserve(bucket.size());

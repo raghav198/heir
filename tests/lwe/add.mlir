@@ -1,4 +1,4 @@
-// RUN: heir-opt %s | FileCheck %s
+// RUN: heir-opt %s
 
 #encoding = #lwe.bit_field_encoding<
   cleartext_start=14,

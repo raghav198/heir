@@ -1,5 +1,5 @@
-#ifndef LIB_DIALECT_LWE_IR_LWEDIALECT_TD_
-#define LIB_DIALECT_LWE_IR_LWEDIALECT_TD_
+#ifndef HEIR_LIB_DIALECT_LWE_IR_LWEDIALECT_TD_
+#define HEIR_LIB_DIALECT_LWE_IR_LWEDIALECT_TD_
 
 include "mlir/IR/DialectBase.td"
 
@@ -30,4 +30,4 @@ def LWE_Dialect : Dialect {
   let useDefaultAttributePrinterParser = 1;
 }
 
-#endif  // LIB_DIALECT_LWE_IR_LWEDIALECT_TD_
+#endif  // HEIR_LIB_DIALECT_LWE_IR_LWEDIALECT_TD_

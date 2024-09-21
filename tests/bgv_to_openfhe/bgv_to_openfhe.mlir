@@ -37,9 +37,11 @@ module {
     %sub = bgv.sub %x, %y  : !ct
     // CHECK: %[[v4:.*]] = openfhe.mul_no_relin [[C]], %[[x4:.*]], %[[y4:.*]]: ([[S]], [[T]], [[T]]) -> [[T2:.*]]
     %mul = bgv.mul %x, %y  : (!ct, !ct) -> !ct_level3
-    // CHECK: %[[v5:.*]] = openfhe.rot [[C]], %[[x5:.*]] {index = 4 : i64}
-    // CHECK-SAME: ([[S]], [[T]]) -> [[T]]
-    %rot = bgv.rotate %x { offset = 4 } : !ct
+    // CHECK: %[[c5:.*]] = arith.index_cast
+    //   CHECK-SAME: to i64
+    %c4 = arith.constant 4 : index
+    // CHECK: %[[v5:.*]] = openfhe.rot [[C]], %[[x5:.*]], %[[c5:.*]]: ([[S]], [[T]], i64) -> [[T]]
+    %rot = bgv.rotate %x, %c4 : !ct, index
     return
   }
 

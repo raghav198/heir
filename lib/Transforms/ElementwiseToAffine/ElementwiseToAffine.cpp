@@ -27,7 +27,9 @@ namespace heir {
 static bool isElementwiseMappableOpOnRankedTensors(Operation *op) {
   if (!OpTrait::hasElementwiseMappableTraits(op)) return false;
 
-  return llvm::any_of(op->getOperandTypes(),
+  // TODO(#534): Test ElementwiseToAffine with `any_of` constraints
+  // as the pass should (in theory) support scalar operands, too
+  return llvm::all_of(op->getOperandTypes(),
                       [](Type type) { return isa<RankedTensorType>(type); });
 }
 
@@ -130,16 +132,8 @@ struct ElementwiseToAffine
     RewritePatternSet patterns(context);
 
     patterns.add<ConvertAnyElementwiseMappableOpOnRankedTensors>(context);
-    target.markUnknownOpDynamicallyLegal([&](Operation *op) {
-      bool convertAll = convertDialects.empty() && convertOps.empty();
-      bool convertDialect = llvm::is_contained(
-          convertDialects, op->getDialect()->getNamespace().str());
-      bool convertOp =
-          llvm::is_contained(convertOps, op->getName().getStringRef().str());
-
-      if (convertAll || convertDialect || convertOp)
-        return !isElementwiseMappableOpOnRankedTensors(op);
-      return true;
+    target.markUnknownOpDynamicallyLegal([](Operation *op) {
+      return !isElementwiseMappableOpOnRankedTensors(op);
     });
 
     if (failed(applyPartialConversion(getOperation(), target,

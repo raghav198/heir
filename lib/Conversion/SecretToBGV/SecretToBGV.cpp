@@ -9,16 +9,12 @@
 #include "lib/Dialect/BGV/IR/BGVDialect.h"
 #include "lib/Dialect/BGV/IR/BGVOps.h"
 #include "lib/Dialect/LWE/IR/LWEAttributes.h"
-#include "lib/Dialect/LWE/IR/LWEOps.h"
 #include "lib/Dialect/LWE/IR/LWETypes.h"
 #include "lib/Dialect/Secret/IR/SecretDialect.h"
 #include "lib/Dialect/Secret/IR/SecretOps.h"
 #include "lib/Dialect/Secret/IR/SecretTypes.h"
 #include "lib/Dialect/TensorExt/IR/TensorExtOps.h"
-#include "llvm/include/llvm/ADT/STLExtras.h"           // from @llvm-project
-#include "llvm/include/llvm/ADT/SmallVector.h"         // from @llvm-project
 #include "llvm/include/llvm/ADT/TypeSwitch.h"          // from @llvm-project
-#include "llvm/include/llvm/Support/Casting.h"         // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Polynomial/IR/Polynomial.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Polynomial/IR/PolynomialAttributes.h"  // from @llvm-project
@@ -132,74 +128,15 @@ class SecretGenericOpConversion
         getTypeConverter()->convertTypes(op.getResultTypes(), resultTypes);
     if (failed(result)) return failure();
 
-    return matchAndRewriteInner(op, resultTypes, inputs, rewriter);
+    replaceOp(op, resultTypes, inputs, rewriter);
+    return success();
   }
 
   // Default method for replacing the secret.generic with the target operation.
-  virtual LogicalResult matchAndRewriteInner(
-      secret::GenericOp op, TypeRange outputTypes, ValueRange inputs,
-      ConversionPatternRewriter &rewriter) const {
+  virtual void replaceOp(secret::GenericOp op, TypeRange outputTypes,
+                         ValueRange inputs,
+                         ConversionPatternRewriter &rewriter) const {
     rewriter.replaceOpWithNewOp<Y>(op, outputTypes, inputs);
-    return success();
-  }
-};
-
-template <typename T, typename Y>
-class SecretGenericOpCipherConversion : public SecretGenericOpConversion<T, Y> {
- public:
-  using SecretGenericOpConversion<T, Y>::SecretGenericOpConversion;
-
-  LogicalResult matchAndRewriteInner(
-      secret::GenericOp op, TypeRange outputTypes, ValueRange inputs,
-      ConversionPatternRewriter &rewriter) const override {
-    auto plaintextValues =
-        llvm::to_vector(llvm::make_filter_range(inputs, [&](Value input) {
-          return !isa<lwe::RLWECiphertextType>(input.getType());
-        }));
-    if (!plaintextValues.empty()) {
-      return failure();
-    }
-    rewriter.replaceOpWithNewOp<Y>(op, outputTypes, inputs);
-    return success();
-  }
-};
-
-template <typename T, typename Y>
-class SecretGenericOpCipherPlainConversion
-    : public SecretGenericOpConversion<T, Y> {
- public:
-  using SecretGenericOpConversion<T, Y>::SecretGenericOpConversion;
-
-  LogicalResult matchAndRewriteInner(
-      secret::GenericOp op, TypeRange outputTypes, ValueRange inputs,
-      ConversionPatternRewriter &rewriter) const override {
-    auto plaintextValues =
-        llvm::to_vector(llvm::make_filter_range(inputs, [&](Value input) {
-          return !isa<lwe::RLWECiphertextType>(input.getType());
-        }));
-    if (plaintextValues.size() != 1) {
-      return failure();
-    }
-
-    TypedValue<RankedTensorType> cleartext;
-    TypedValue<lwe::RLWECiphertextType> ciphertext;
-
-    if (inputs[0] == plaintextValues[0]) {
-      cleartext = cast<TypedValue<RankedTensorType>>(inputs[0]);
-      ciphertext = cast<TypedValue<lwe::RLWECiphertextType>>(inputs[1]);
-    } else {
-      cleartext = cast<TypedValue<RankedTensorType>>(inputs[1]);
-      ciphertext = cast<TypedValue<lwe::RLWECiphertextType>>(inputs[0]);
-    }
-
-    auto plaintextTy = lwe::RLWEPlaintextType::get(
-        op.getContext(), ciphertext.getType().getEncoding(),
-        ciphertext.getType().getRlweParams().getRing(), cleartext.getType());
-    auto plaintext = rewriter.create<lwe::RLWEEncodeOp>(
-        op.getLoc(), plaintextTy, cleartext, ciphertext.getType().getEncoding(),
-        ciphertext.getType().getRlweParams().getRing());
-    rewriter.replaceOpWithNewOp<Y>(op, ciphertext, plaintext);
-    return success();
   }
 };
 
@@ -209,42 +146,12 @@ class SecretGenericOpMulConversion
   using SecretGenericOpConversion<arith::MulIOp,
                                   bgv::MulOp>::SecretGenericOpConversion;
 
-  LogicalResult matchAndRewriteInner(
-      secret::GenericOp op, TypeRange outputTypes, ValueRange inputs,
-      ConversionPatternRewriter &rewriter) const override {
-    auto plaintextValues =
-        llvm::to_vector(llvm::make_filter_range(inputs, [&](Value input) {
-          return !isa<lwe::RLWECiphertextType>(input.getType());
-        }));
-    if (!plaintextValues.empty()) {
-      return failure();
-    }
-    rewriter.replaceOpWithNewOp<bgv::RelinearizeOp>(
+  void replaceOp(secret::GenericOp op, TypeRange outputTypes, ValueRange inputs,
+                 ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<bgv::Relinearize>(
         op, rewriter.create<bgv::MulOp>(op.getLoc(), inputs),
         rewriter.getDenseI32ArrayAttr({0, 1, 2}),
         rewriter.getDenseI32ArrayAttr({0, 1}));
-    return success();
-  }
-};
-
-class SecretGenericOpRotateConversion
-    : public SecretGenericOpConversion<tensor_ext::RotateOp, bgv::RotateOp> {
- public:
-  using SecretGenericOpConversion<tensor_ext::RotateOp,
-                                  bgv::RotateOp>::SecretGenericOpConversion;
-
-  LogicalResult matchAndRewriteInner(
-      secret::GenericOp op, TypeRange outputTypes, ValueRange inputs,
-      ConversionPatternRewriter &rewriter) const override {
-    // Check that the offset is a constant.
-    auto offset = inputs[1];
-    auto constantOffset = dyn_cast<arith::ConstantOp>(offset.getDefiningOp());
-    if (!constantOffset) {
-      op.emitError("expected constant offset for rotate");
-    }
-    auto offsetAttr = llvm::dyn_cast<IntegerAttr>(constantOffset.getValue());
-    rewriter.replaceOpWithNewOp<bgv::RotateOp>(op, inputs[0], offsetAttr);
-    return success();
   }
 };
 
@@ -291,15 +198,11 @@ struct SecretToBGV : public impl::SecretToBGVBase<SecretToBGV> {
     target.addIllegalOp<secret::GenericOp>();
 
     addStructuralConversionPatterns(typeConverter, patterns, target);
-    patterns.add<
-        SecretGenericOpCipherConversion<arith::AddIOp, bgv::AddOp>,
-        SecretGenericOpCipherConversion<arith::SubIOp, bgv::SubOp>,
-        SecretGenericOpConversion<tensor::ExtractOp, bgv::ExtractOp>,
-        SecretGenericOpRotateConversion, SecretGenericOpMulConversion,
-        SecretGenericOpCipherPlainConversion<arith::AddIOp, bgv::AddPlainOp>,
-        SecretGenericOpCipherPlainConversion<arith::SubIOp, bgv::SubPlainOp>,
-        SecretGenericOpCipherPlainConversion<arith::MulIOp, bgv::MulPlainOp>>(
-        typeConverter, context);
+    patterns.add<SecretGenericOpConversion<arith::AddIOp, bgv::AddOp>,
+                 SecretGenericOpConversion<arith::SubIOp, bgv::SubOp>,
+                 SecretGenericOpConversion<tensor::ExtractOp, bgv::ExtractOp>,
+                 SecretGenericOpConversion<tensor_ext::RotateOp, bgv::RotateOp>,
+                 SecretGenericOpMulConversion>(typeConverter, context);
 
     if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
       return signalPassFailure();

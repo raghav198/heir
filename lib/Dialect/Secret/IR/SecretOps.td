@@ -1,5 +1,5 @@
-#ifndef LIB_DIALECT_SECRET_IR_SECRETOPS_TD_
-#define LIB_DIALECT_SECRET_IR_SECRETOPS_TD_
+#ifndef HEIR_LIB_DIALECT_SECRET_IR_SECRETOPS_TD_
+#define HEIR_LIB_DIALECT_SECRET_IR_SECRETOPS_TD_
 
 include "SecretDialect.td"
 include "SecretTypes.td"
@@ -153,8 +153,8 @@ def Secret_GenericOp : Secret_Op<"generic", [
 
     ```mlir
     %y = arith.constant 7: i32
-    %Z = secret.generic ins(%X : !secret.secret<i32>) {
-      ^bb0(%x: i32):
+    %Z = secret.generic ins(%Y : !secret.secret<i32>) {
+      ^bb0(%y: i32):
         %z = arith.addi %x, %y: i32
         secret.yield %z : i32
       } -> (!secret.secret<i32>)
@@ -281,4 +281,4 @@ def CastOp : Secret_Op<"cast", [Pure]> {
 }
 
 
-#endif  // LIB_DIALECT_SECRET_IR_SECRETOPS_TD_
+#endif  // HEIR_LIB_DIALECT_SECRET_IR_SECRETOPS_TD_

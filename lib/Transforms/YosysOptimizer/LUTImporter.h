@@ -1,5 +1,5 @@
-#ifndef LIB_TRANSFORMS_YOSYSOPTIMIZER_LUTIMPORTER_H_
-#define LIB_TRANSFORMS_YOSYSOPTIMIZER_LUTIMPORTER_H_
+#ifndef HEIR_LIB_TRANSFORMS_YOSYSOPTIMIZER_LUTIMPORTER_H_
+#define HEIR_LIB_TRANSFORMS_YOSYSOPTIMIZER_LUTIMPORTER_H_
 
 #include "lib/Transforms/YosysOptimizer/RTLILImporter.h"
 #include "mlir/include/mlir/IR/ImplicitLocOpBuilder.h"  // from @llvm-project
@@ -35,4 +35,4 @@ class LUTImporter : public RTLILImporter {
 }  // namespace heir
 }  // namespace mlir
 
-#endif  // LIB_TRANSFORMS_YOSYSOPTIMIZER_LUTIMPORTER_H_
+#endif  // HEIR_LIB_TRANSFORMS_YOSYSOPTIMIZER_LUTIMPORTER_H_

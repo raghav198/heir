@@ -47,34 +47,34 @@ class Openfhe_BinaryOp<string mnemonic, list<Trait> traits = []>
   let results = (outs RLWECiphertext:$output);
 }
 
-def GenParamsOp : Openfhe_Op<"gen_params"> {
-  let arguments = (ins
-    I64Attr:$mulDepth,
-    I64Attr:$plainMod
+class Openfhe_lwe_BinaryOp<string mnemonic, list<Trait> traits = []>
+  :  Openfhe_Op<mnemonic, traits # [
+    Pure,
+    AllTypesMatch<["lhs", "rhs", "output"]>,
+]>{
+ let arguments = (ins
+    Openfhe_LWEScheme:$cryptoContext,
+    LWECiphertext:$lhs,
+    LWECiphertext:$rhs
   );
-  let results = (outs Openfhe_CCParams:$params);
+  let results = (outs LWECiphertext:$output);
 }
 
-def GenContextOp : Openfhe_Op<"gen_context"> {
+def MakeLutOp : Openfhe_Op<"make_lut", [Pure]> {
   let arguments = (ins
-    Openfhe_CCParams:$params
+    Openfhe_BinFHEContext:$cryptoContext,
+    DenseI32ArrayAttr:$values
   );
-  let results = (outs Openfhe_CryptoContext:$context);
+  let results = (outs Openfhe_LUT:$output);
 }
 
-def GenMulKeyOp : Openfhe_Op<"gen_mulkey"> {
+def EvalFuncOp : Openfhe_Op<"eval_func", [Pure]> {
   let arguments = (ins
-    Openfhe_CryptoContext:$cryptoContext,
-    Openfhe_PrivateKey:$privateKey
+    Openfhe_BinFHEContext:$cryptoContext,
+    Openfhe_LUT:$lut,
+    LWECiphertext:$input
   );
-}
-
-def GenRotKeyOp : Openfhe_Op<"gen_rotkey"> {
-  let arguments = (ins
-    Openfhe_CryptoContext:$cryptoContext,
-    Openfhe_PrivateKey:$privateKey,
-    DenseI64ArrayAttr:$indices
-  );
+  let results = (outs LWECiphertext:$output);
 }
 
 def EncryptOp : Openfhe_Op<"encrypt", [Pure]> {
@@ -83,7 +83,7 @@ def EncryptOp : Openfhe_Op<"encrypt", [Pure]> {
     RLWEPlaintext:$plaintext,
     Openfhe_PublicKey:$publicKey)
   ;
-  let results = (outs RLWECiphertext:$ciphertext);
+  let results = (outs RLWECiphertext:$output);
 }
 
 def DecryptOp : Openfhe_Op<"decrypt", [Pure]> {
@@ -99,6 +99,9 @@ def AddOp : Openfhe_BinaryOp<"add"> { let summary = "OpenFHE add operation of tw
 def SubOp : Openfhe_BinaryOp<"sub"> { let summary = "OpenFHE sub operation of two ciphertexts."; }
 
 def MulOp : Openfhe_BinaryOp<"mul"> { let summary = "OpenFHE mul operation of two ciphertexts with relinearization."; }
+
+def LWEAddOp : Openfhe_lwe_BinaryOp<"lwe_add"> { let summary = "OpenFHE add operation of two LWE ciphertexts."; }
+def LWESubOp : Openfhe_lwe_BinaryOp<"lwe_sub"> { let summary = "OpenFHE sub operation of two LWE ciphertexts."; }
 
 def MulNoRelinOp : Openfhe_Op<"mul_no_relin", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
   let summary = "OpenFHE mul operation of two ciphertexts without relinearization.";
@@ -136,6 +139,27 @@ def MulConstOp : Openfhe_Op<"mul_const",[
   let results = (outs RLWECiphertext:$output);
 }
 
+def LWEMulConstOp : Openfhe_Op<"lwe_mul_const",[
+    Pure,
+    AllTypesMatch<["ciphertext", "output"]>
+]> {
+  let summary = "OpenFHE mul operation of an LWE ciphertext and a constant.";
+  let arguments = (ins
+    Openfhe_LWEScheme:$cryptoContext,
+    LWECiphertext:$ciphertext,
+    I64:$constant
+  );
+  let results = (outs LWECiphertext:$output);
+}
+
+def GetLWESchemeOp : Openfhe_Op<"get_lwe_scheme", [Pure]> {
+  let summary = "Gets pointer to underlying LWE scheme.";
+  let arguments = (ins
+    Openfhe_BinFHEContext:$cryptoContext
+  );
+  let results = (outs Openfhe_LWEScheme:$scheme);
+}
+
 def NegateOp : Openfhe_UnaryOp<"negate"> { let summary = "OpenFHE negate operation of a ciphertext."; }
 def SquareOp : Openfhe_UnaryOp<"square"> { let summary = "OpenFHE square operation of a ciphertext."; }
 def RelinOp : Openfhe_UnaryTypeSwitchOp<"relin"> { let summary = "OpenFHE relinearize operation of a ciphertext."; }
@@ -150,7 +174,7 @@ def RotOp : Openfhe_Op<"rot",[
   let arguments = (ins
     Openfhe_CryptoContext:$cryptoContext,
     RLWECiphertext:$ciphertext,
-    Builtin_IntegerAttr:$index
+    I64:$index
   );
   let results = (outs RLWECiphertext:$output);
 }

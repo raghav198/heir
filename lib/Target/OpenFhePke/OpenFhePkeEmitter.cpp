@@ -1,12 +1,10 @@
 #include "lib/Target/OpenFhePke/OpenFhePkeEmitter.h"
 
-#include <cstdint>
 #include <functional>
 #include <iterator>
 #include <numeric>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include "lib/Analysis/SelectVariableNames/SelectVariableNames.h"
 #include "lib/Dialect/LWE/IR/LWEDialect.h"
@@ -16,9 +14,8 @@
 #include "lib/Target/OpenFhePke/OpenFhePkeTemplates.h"
 #include "lib/Target/OpenFhePke/OpenFheUtils.h"
 #include "lib/Target/Utils.h"
-#include "llvm/include/llvm/ADT/STLExtras.h"            // from @llvm-project
-#include "llvm/include/llvm/ADT/StringExtras.h"         // from @llvm-project
 #include "llvm/include/llvm/ADT/TypeSwitch.h"           // from @llvm-project
+#include "llvm/include/llvm/Support/Debug.h"      // from @llvm-project
 #include "llvm/include/llvm/Support/FormatVariadic.h"   // from @llvm-project
 #include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"   // from @llvm-project
@@ -51,7 +48,7 @@ void registerToOpenFhePkeTranslation() {
         registry.insert<arith::ArithDialect, func::FuncDialect,
                         openfhe::OpenfheDialect, lwe::LWEDialect,
                         ::mlir::polynomial::PolynomialDialect,
-                        tensor::TensorDialect>();
+                        arith::ArithDialect, tensor::TensorDialect>();
       });
 }
 
@@ -71,7 +68,7 @@ LogicalResult OpenFhePkeEmitter::translate(Operation &op) {
           .Case<func::FuncOp, func::ReturnOp>(
               [&](auto op) { return printOperation(op); })
           // Arith ops
-          .Case<arith::ConstantOp, arith::ExtSIOp, arith::IndexCastOp>(
+          .Case<arith::ConstantOp, arith::IndexCastOp>(
               [&](auto op) { return printOperation(op); })
           // LWE ops
           .Case<lwe::RLWEEncodeOp, lwe::RLWEDecodeOp,
@@ -80,8 +77,7 @@ LogicalResult OpenFhePkeEmitter::translate(Operation &op) {
           // OpenFHE ops
           .Case<AddOp, SubOp, MulNoRelinOp, MulOp, MulPlainOp, SquareOp,
                 NegateOp, MulConstOp, RelinOp, ModReduceOp, LevelReduceOp,
-                RotOp, AutomorphOp, KeySwitchOp, EncryptOp, DecryptOp,
-                GenParamsOp, GenContextOp, GenMulKeyOp, GenRotKeyOp>(
+                RotOp, AutomorphOp, KeySwitchOp, EncryptOp, DecryptOp>(
               [&](auto op) { return printOperation(op); })
           .Default([&](Operation &) {
             return op.emitOpError("unable to find printer for op");
@@ -249,13 +245,8 @@ LogicalResult OpenFhePkeEmitter::printOperation(LevelReduceOp op) {
 }
 
 LogicalResult OpenFhePkeEmitter::printOperation(RotOp op) {
-  emitAutoAssignPrefix(op.getResult());
-
-  os << variableNames->getNameForValue(op.getCryptoContext()) << "->"
-     << "EvalRotate" << "("
-     << variableNames->getNameForValue(op.getCiphertext()) << ", "
-     << op.getIndex().getValue() << ");\n";
-  return success();
+  return printEvalMethod(op.getResult(), op.getCryptoContext(),
+                         {op.getCiphertext(), op.getIndex()}, "EvalRotate");
 }
 
 LogicalResult OpenFhePkeEmitter::printOperation(AutomorphOp op) {
@@ -328,24 +319,6 @@ LogicalResult OpenFhePkeEmitter::printOperation(arith::ConstantOp op) {
   return success();
 }
 
-LogicalResult OpenFhePkeEmitter::printOperation(arith::ExtSIOp op) {
-  // OpenFHE has a convention that all inputs to MakePackedPlaintext are
-  // std::vector<int64_t>, so earlier stages in the pipeline emit typecasts
-
-  std::string inputVarName = variableNames->getNameForValue(op.getOperand());
-  std::string resultVarName = variableNames->getNameForValue(op.getResult());
-
-  // If it's a vector<int**_t>, we can use a copy constructor to upcast.
-  if (auto tensorTy = dyn_cast<RankedTensorType>(op.getOperand().getType())) {
-    os << "std::vector<int64_t> " << resultVarName << "(std::begin("
-       << inputVarName << "), std::end(" << inputVarName << "));\n";
-  } else {
-    return op.emitOpError() << "Unsupported input type";
-  }
-
-  return success();
-}
-
 LogicalResult OpenFhePkeEmitter::printOperation(arith::IndexCastOp op) {
   Type outputType = op.getOut().getType();
   if (failed(emitTypedAssignPrefix(op.getResult()))) {
@@ -367,13 +340,29 @@ LogicalResult OpenFhePkeEmitter::printOperation(
 }
 
 LogicalResult OpenFhePkeEmitter::printOperation(lwe::RLWEEncodeOp op) {
+  // OpenFHE has a convention that all inputs to MakePackedPlaintext are
+  // std::vector<int64_t>, so we need to cast the input to that type.
+
   std::string inputVarName = variableNames->getNameForValue(op.getInput());
+  std::string convertedVarName;
+  // If it's a vector<int**_t>, we can use a copy constructor to upcast.
+  // TODO(#647): move type casting to a higher level lowering.
+  if (auto tensorTy = dyn_cast<RankedTensorType>(op.getInput().getType())) {
+    std::string tmpVar = inputVarName + "_cast";
+    os << "std::vector<int64_t> " << tmpVar << "(std::begin(" << inputVarName
+       << "), std::end(" << inputVarName << "));\n";
+    convertedVarName = tmpVar;
+  } else {
+    // TODO(#646): support scalar inputs to encode, probably at a higher level
+    // than the final codegen.
+    return op.emitOpError() << "Unsupported input type";
+  }
 
   emitAutoAssignPrefix(op.getResult());
   FailureOr<Value> resultCC = getContextualCryptoContext(op.getOperation());
   if (failed(resultCC)) return resultCC;
   os << variableNames->getNameForValue(resultCC.value())
-     << "->MakePackedPlaintext(" << inputVarName << ");\n";
+     << "->MakePackedPlaintext(" << convertedVarName << ");\n";
   return success();
 }
 
@@ -431,50 +420,6 @@ LogicalResult OpenFhePkeEmitter::printOperation(DecryptOp op) {
       {op.getPrivateKey(), op.getCiphertext()},
       [&](Value value) { return variableNames->getNameForValue(value); });
   os << ", &" << variableNames->getNameForValue(op.getResult()) << ");\n";
-  return success();
-}
-
-LogicalResult OpenFhePkeEmitter::printOperation(GenParamsOp op) {
-  auto paramsName = variableNames->getNameForValue(op.getResult());
-  int64_t mulDepth = op.getMulDepthAttr().getValue().getSExtValue();
-  int64_t plainMod = op.getPlainModAttr().getValue().getSExtValue();
-
-  os << "CCParamsT " << paramsName << ";\n";
-  os << paramsName << ".SetMultiplicativeDepth(" << mulDepth << ");\n";
-  os << paramsName << ".SetPlaintextModulus(" << plainMod << ");\n";
-  return success();
-}
-
-LogicalResult OpenFhePkeEmitter::printOperation(GenContextOp op) {
-  auto paramsName = variableNames->getNameForValue(op.getParams());
-  auto contextName = variableNames->getNameForValue(op.getResult());
-
-  os << "CryptoContextT " << contextName << " = GenCryptoContext(" << paramsName
-     << ");\n";
-  os << contextName << "->Enable(PKE);\n";
-  os << contextName << "->Enable(KEYSWITCH);\n";
-  os << contextName << "->Enable(LEVELEDSHE);\n";
-  return success();
-}
-
-LogicalResult OpenFhePkeEmitter::printOperation(GenMulKeyOp op) {
-  auto contextName = variableNames->getNameForValue(op.getCryptoContext());
-  auto privateKeyName = variableNames->getNameForValue(op.getPrivateKey());
-  os << contextName << "->EvalMultKeyGen(" << privateKeyName << ");\n";
-  return success();
-}
-
-LogicalResult OpenFhePkeEmitter::printOperation(GenRotKeyOp op) {
-  auto contextName = variableNames->getNameForValue(op.getCryptoContext());
-  auto privateKeyName = variableNames->getNameForValue(op.getPrivateKey());
-
-  std::vector<std::string> rotIndices;
-  llvm::transform(op.getIndices(), std::back_inserter(rotIndices),
-                  [](int64_t value) { return std::to_string(value); });
-
-  os << contextName << "->EvalRotateKeyGen(" << privateKeyName << ", {";
-  os << llvm::join(rotIndices, ", ");
-  os << "});\n";
   return success();
 }
 

@@ -1,37 +1,35 @@
 #include <cstdlib>
-#include <memory>
 #include <string>
 #include <vector>
 
-#include "lib/Conversion/BGVToLWE/BGVToLWE.h"
 #include "lib/Conversion/BGVToOpenfhe/BGVToOpenfhe.h"
-#include "lib/Conversion/CGGIToJaxite/CGGIToJaxite.h"
+#include "lib/Conversion/BGVToPolynomial/BGVToPolynomial.h"
+#include "lib/Conversion/CGGIToOpenfhe/CGGIToOpenfhe.h"
 #include "lib/Conversion/CGGIToTfheRust/CGGIToTfheRust.h"
 #include "lib/Conversion/CGGIToTfheRustBool/CGGIToTfheRustBool.h"
 #include "lib/Conversion/CombToCGGI/CombToCGGI.h"
-#include "lib/Conversion/LWEToPolynomial/LWEToPolynomial.h"
 #include "lib/Conversion/MemrefToArith/MemrefToArith.h"
-#include "lib/Conversion/ModArithToArith/ModArithToArith.h"
 #include "lib/Conversion/PolynomialToStandard/PolynomialToStandard.h"
 #include "lib/Conversion/SecretToBGV/SecretToBGV.h"
+#include "lib/Dialect/ArithExt/IR/ArithExtDialect.h"
 #include "lib/Dialect/BGV/IR/BGVDialect.h"
+#include "lib/Dialect/BGV/Transforms/AddClientInterface.h"
+#include "lib/Dialect/BGV/Transforms/Passes.h"
 #include "lib/Dialect/CGGI/IR/CGGIDialect.h"
+#include "lib/Dialect/CGGI/Transforms/CGGICanonicalizeToLuts.h"
 #include "lib/Dialect/CGGI/Transforms/Passes.h"
-#include "lib/Dialect/CKKS/IR/CKKSDialect.h"
 #include "lib/Dialect/Comb/IR/CombDialect.h"
+// #include "lib/Dialect/Comb/Transforms/GateToLut.h"
+// #include "lib/Dialect/Comb/Transforms/Passes.h"
 #include "lib/Dialect/Jaxite/IR/JaxiteDialect.h"
 #include "lib/Dialect/LWE/IR/LWEDialect.h"
-#include "lib/Dialect/LWE/Transforms/AddClientInterface.h"
 #include "lib/Dialect/LWE/Transforms/Passes.h"
-#include "lib/Dialect/ModArith/IR/ModArithDialect.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheDialect.h"
-#include "lib/Dialect/Openfhe/Transforms/ConfigureCryptoContext.h"
-#include "lib/Dialect/Openfhe/Transforms/Passes.h"
+#include "lib/Dialect/PolyExt/IR/PolyExtDialect.h"
 #include "lib/Dialect/Polynomial/Transforms/NTTRewrites.h"
 #include "lib/Dialect/Polynomial/Transforms/Passes.h"
 #include "lib/Dialect/RNS/IR/RNSDialect.h"
 #include "lib/Dialect/RNS/IR/RNSTypes.h"
-#include "lib/Dialect/Random/IR/RandomDialect.h"
 #include "lib/Dialect/Secret/IR/SecretDialect.h"
 #include "lib/Dialect/Secret/Transforms/BufferizableOpInterfaceImpl.h"
 #include "lib/Dialect/Secret/Transforms/DistributeGeneric.h"
@@ -44,68 +42,50 @@
 #include "lib/Dialect/TfheRust/IR/TfheRustDialect.h"
 #include "lib/Dialect/TfheRustBool/IR/TfheRustBoolDialect.h"
 #include "lib/Transforms/ApplyFolders/ApplyFolders.h"
-#include "lib/Transforms/ConvertIfToSelect/ConvertIfToSelect.h"
-#include "lib/Transforms/ConvertSecretExtractToStaticExtract/ConvertSecretExtractToStaticExtract.h"
-#include "lib/Transforms/ConvertSecretForToStaticFor/ConvertSecretForToStaticFor.h"
-#include "lib/Transforms/ConvertSecretInsertToStaticInsert/ConvertSecretInsertToStaticInsert.h"
-#include "lib/Transforms/ConvertSecretWhileToStaticFor/ConvertSecretWhileToStaticFor.h"
 #include "lib/Transforms/ElementwiseToAffine/ElementwiseToAffine.h"
 #include "lib/Transforms/ForwardStoreToLoad/ForwardStoreToLoad.h"
 #include "lib/Transforms/FullLoopUnroll/FullLoopUnroll.h"
-#include "lib/Transforms/OperationBalancer/OperationBalancer.h"
+#include "lib/Transforms/MergeLUTs/MergeLUTs.h"
 #include "lib/Transforms/Secretize/Passes.h"
+#include "lib/Transforms/ShrinkLutConstants/ShrinkLutConstants.h"
 #include "lib/Transforms/StraightLineVectorizer/StraightLineVectorizer.h"
 #include "lib/Transforms/UnusedMemRef/UnusedMemRef.h"
-#include "llvm/include/llvm/Support/CommandLine.h"  // from @llvm-project
-#include "llvm/include/llvm/Support/raw_ostream.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/AffineToStandard/AffineToStandard.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/ArithToLLVM/ArithToLLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/BufferizationToMemRef/BufferizationToMemRef.h"  // from @llvm-project
-#include "mlir/include/mlir/Conversion/ComplexToLLVM/ComplexToLLVM.h"  // from @llvm-project
-#include "mlir/include/mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/ConvertToLLVM/ToLLVMPass.h"  // from @llvm-project
-#include "mlir/include/mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"  // from @llvm-project
-#include "mlir/include/mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/IndexToLLVM/IndexToLLVM.h"  // from @llvm-project
-#include "mlir/include/mlir/Conversion/MathToLLVM/MathToLLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"  // from @llvm-project
-#include "mlir/include/mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/TensorToLinalg/TensorToLinalgPass.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/TosaToArith/TosaToArith.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/TosaToLinalg/TosaToLinalg.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/TosaToTensor/TosaToTensor.h"  // from @llvm-project
-#include "mlir/include/mlir/Conversion/UBToLLVM/UBToLLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Affine/Passes.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Arith/Transforms/BufferDeallocationOpInterfaceImpl.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/Transforms/Passes.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Bufferization/IR/Bufferization.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Bufferization/Transforms/Passes.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/ControlFlow/Transforms/BufferizableOpInterfaceImpl.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Func/Extensions/AllExtensions.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/Transforms/Passes.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/LLVMIR/LLVMDialect.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Linalg/Passes.h"       // from @llvm-project
-#include "mlir/include/mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Math/IR/Math.h"      // from @llvm-project
-#include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
+#include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"    // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/Transforms/Passes.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Polynomial/IR/PolynomialDialect.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/SCF/IR/SCF.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Tensor/Transforms/Passes.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Tosa/IR/TosaOps.h"     // from @llvm-project
+#include "mlir/include/mlir/InitAllDialects.h"             // from @llvm-project
+#include "mlir/include/mlir/InitAllExtensions.h"           // from @llvm-project
+#include "mlir/include/mlir/InitAllPasses.h"               // from @llvm-project
 #include "mlir/include/mlir/Pass/PassManager.h"            // from @llvm-project
 #include "mlir/include/mlir/Pass/PassOptions.h"            // from @llvm-project
 #include "mlir/include/mlir/Pass/PassRegistry.h"           // from @llvm-project
 #include "mlir/include/mlir/Tools/mlir-opt/MlirOptMain.h"  // from @llvm-project
 #include "mlir/include/mlir/Transforms/Passes.h"           // from @llvm-project
+#include "llvm/include/llvm/Support/CommandLine.h"  // from @llvm-project
+#include "llvm/include/llvm/Support/raw_ostream.h"  // from @llvm-project
 
 #ifndef HEIR_NO_YOSYS
 #include "lib/Transforms/YosysOptimizer/YosysOptimizer.h"
@@ -439,12 +419,17 @@ void tosaToBooleanFpgaTfhePipeline(const std::string &yosysFilesPath,
         pm.addPass(createCanonicalizerPass());
         pm.addPass(createCSEPass());
         pm.addPass(createSCCPPass());
+
+        pm.addPass(createMergeLUTs());
+        pm.addPass(createShrinkLutConstants());
+        pm.addPass(mlir::heir::cggi::createCGGICanonicalizeToLuts());
+
       });
 }
 #endif
 
-struct MlirToBgvPipelineOptions
-    : public PassPipelineOptions<MlirToBgvPipelineOptions> {
+struct MlirToOpenFheBgvPipelineOptions
+    : public PassPipelineOptions<MlirToOpenFheBgvPipelineOptions> {
   PassOptions::Option<std::string> entryFunction{
       *this, "entry-function", llvm::cl::desc("Entry function to secretize"),
       llvm::cl::init("main")};
@@ -456,8 +441,8 @@ struct MlirToBgvPipelineOptions
       llvm::cl::init(1024)};
 };
 
-void mlirToBgvPipelineBuilder(OpPassManager &pm,
-                              const MlirToBgvPipelineOptions &options) {
+void mlirToOpenFheBgvPipelineBuilder(
+    OpPassManager &pm, const MlirToOpenFheBgvPipelineOptions &options) {
   // Secretize inputs
   pm.addPass(createSecretize(SecretizeOptions{options.entryFunction}));
   pm.addPass(createWrapGeneric());
@@ -475,41 +460,29 @@ void mlirToBgvPipelineBuilder(OpPassManager &pm,
   auto secretToBgvOpts = SecretToBGVOptions{};
   secretToBgvOpts.polyModDegree = options.ciphertextDegree;
   pm.addPass(createSecretToBGV(secretToBgvOpts));
-}
-
-void mlirToOpenFheBgvPipelineBuilder(OpPassManager &pm,
-                                     const MlirToBgvPipelineOptions &options) {
-  // lower to BGV
-  mlirToBgvPipelineBuilder(pm, options);
 
   // Add client interface
-  auto addClientInterfaceOptions = lwe::AddClientInterfaceOptions{};
+  auto addClientInterfaceOptions = bgv::AddClientInterfaceOptions{};
   // OpenFHE's pke API, which this pipeline generates, is always public-key
   addClientInterfaceOptions.usePublicKey = true;
   addClientInterfaceOptions.oneValuePerHelperFn = true;
-  pm.addPass(lwe::createAddClientInterface(addClientInterfaceOptions));
+  pm.addPass(bgv::createAddClientInterface(addClientInterfaceOptions));
 
   // Lower to openfhe
   pm.addPass(bgv::createBGVToOpenfhe());
-  pm.addPass(createCanonicalizerPass());
-  auto configureCryptoContextOptions = openfhe::ConfigureCryptoContextOptions{};
-  configureCryptoContextOptions.entryFunction = options.entryFunction;
-  pm.addPass(
-      openfhe::createConfigureCryptoContext(configureCryptoContextOptions));
 }
 
 int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
 
-  registry.insert<mod_arith::ModArithDialect>();
+  registry.insert<arith_ext::ArithExtDialect>();
   registry.insert<bgv::BGVDialect>();
-  registry.insert<ckks::CKKSDialect>();
   registry.insert<cggi::CGGIDialect>();
   registry.insert<comb::CombDialect>();
   registry.insert<jaxite::JaxiteDialect>();
   registry.insert<lwe::LWEDialect>();
-  registry.insert<random::RandomDialect>();
   registry.insert<openfhe::OpenfheDialect>();
+  registry.insert<poly_ext::PolyExtDialect>();
   registry.insert<rns::RNSDialect>();
   registry.insert<secret::SecretDialect>();
   registry.insert<tensor_ext::TensorExtDialect>();
@@ -517,93 +490,41 @@ int main(int argc, char **argv) {
   registry.insert<tfhe_rust_bool::TfheRustBoolDialect>();
 
   // Add expected MLIR dialects to the registry.
-  registry.insert<LLVM::LLVMDialect>();
-  registry.insert<TosaDialect>();
   registry.insert<affine::AffineDialect>();
   registry.insert<arith::ArithDialect>();
-  registry.insert<bufferization::BufferizationDialect>();
   registry.insert<func::FuncDialect>();
-  registry.insert<math::MathDialect>();
   registry.insert<memref::MemRefDialect>();
-  registry.insert<::mlir::polynomial::PolynomialDialect>();
   registry.insert<scf::SCFDialect>();
   registry.insert<tensor::TensorDialect>();
+  registry.insert<TosaDialect>();
+  registry.insert<LLVM::LLVMDialect>();
+  registerAllDialects(registry);
+  registerAllExtensions(registry);
 
-  // Uncomment if you want everything bound to CLI flags.
-  // registerAllDialects(registry);
-  // registerAllExtensions(registry);
-  // registerAllPasses();
-
-  // Upstream passes used by HEIR
-  // Converting to LLVM
-  arith::registerConvertArithToLLVMInterface(registry);
-  cf::registerConvertControlFlowToLLVMInterface(registry);
-  func::registerAllExtensions(registry);
-  index::registerConvertIndexToLLVMInterface(registry);
-  registerConvertComplexToLLVMInterface(registry);
-  registerConvertFuncToLLVMInterface(registry);
-  registerConvertMathToLLVMInterface(registry);
-  registerConvertMemRefToLLVMInterface(registry);
-  ub::registerConvertUBToLLVMInterface(registry);
-
-  // Misc
-  registerTransformsPasses();      // canonicalize, cse, etc.
-  affine::registerAffinePasses();  // loop unrolling
-
-  // These are only needed by two tests that build a pass pipeline
-  // from the CLI. Those tests can probably eventually be removed.
-  //   - `tests/memref_global.mlir`
-  //   - `tests/memref_global_raw.mlir`
-  registerPass([]() -> std::unique_ptr<Pass> {
-    return createArithToLLVMConversionPass();
-  });
-  registerPass([]() -> std::unique_ptr<Pass> {
-    return createConvertControlFlowToLLVMPass();
-  });
-  registerPass(
-      []() -> std::unique_ptr<Pass> { return createConvertFuncToLLVMPass(); });
-  registerPass(
-      []() -> std::unique_ptr<Pass> { return createConvertSCFToCFPass(); });
-  registerPass([]() -> std::unique_ptr<Pass> {
-    return createFinalizeMemRefToLLVMConversionPass();
-  });
-  registerPass(
-      []() -> std::unique_ptr<Pass> { return createLowerAffinePass(); });
-  registerPass([]() -> std::unique_ptr<Pass> {
-    return createReconcileUnrealizedCastsPass();
-  });
-
-  // Bufferization and external models
-  bufferization::registerBufferizationPasses();
-  arith::registerBufferizableOpInterfaceExternalModels(registry);
-  arith::registerBufferDeallocationOpInterfaceExternalModels(registry);
-  bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
-      registry);
-  cf::registerBufferizableOpInterfaceExternalModels(registry);
-  linalg::registerBufferizableOpInterfaceExternalModels(registry);
-  scf::registerBufferizableOpInterfaceExternalModels(registry);
-  tensor::registerBufferizableOpInterfaceExternalModels(registry);
+  // Register MLIR core passes to build pipeline.
+  registerAllPasses();
 
   // Custom passes in HEIR
+  bgv::registerBGVPasses();
   cggi::registerCGGIPasses();
   lwe::registerLWEPasses();
   ::mlir::heir::polynomial::registerPolynomialPasses();
   secret::registerSecretPasses();
+  
   tensor_ext::registerTensorExtPasses();
-  openfhe::registerOpenfhePasses();
   registerElementwiseToAffinePasses();
   registerSecretizePasses();
   registerFullLoopUnrollPasses();
-  registerConvertIfToSelectPasses();
-  registerConvertSecretForToStaticForPasses();
-  registerConvertSecretWhileToStaticForPasses();
-  registerConvertSecretExtractToStaticExtractPasses();
-  registerConvertSecretInsertToStaticInsertPasses();
   registerApplyFoldersPasses();
   registerForwardStoreToLoadPasses();
-  registerOperationBalancerPasses();
   registerStraightLineVectorizerPasses();
+  
   registerUnusedMemRefPasses();
+  registerMergeLUTsPasses();
+  registerShrinkLutConstantsPasses();
+  mlir::heir::cggi::registerCGGICanonicalizeToLutsPass();
+  // comb::registerGateToLut();
+
   // Register yosys optimizer pipeline if configured.
 #ifndef HEIR_NO_YOSYS
 #ifndef HEIR_ABC_BINARY
@@ -629,15 +550,13 @@ int main(int argc, char **argv) {
 #endif
 
   // Dialect conversion passes in HEIR
-  mod_arith::registerModArithToArithPasses();
-  bgv::registerBGVToLWEPasses();
+  bgv::registerBGVToPolynomialPasses();
   bgv::registerBGVToOpenfhePasses();
   comb::registerCombToCGGIPasses();
-  lwe::registerLWEToPolynomialPasses();
   ::mlir::heir::polynomial::registerPolynomialToStandardPasses();
-  registerCGGIToJaxitePasses();
   registerCGGIToTfheRustPasses();
   registerCGGIToTfheRustBoolPasses();
+  registerCGGIToOpenfhePasses();
   registerSecretToBGVPasses();
 
   // Interfaces in HEIR
@@ -661,13 +580,7 @@ int main(int argc, char **argv) {
       "tensor_ext.rotate",
       heirSIMDVectorizerPipelineBuilder);
 
-  PassPipelineRegistration<MlirToBgvPipelineOptions>(
-      "mlir-to-bgv",
-      "Convert a func using standard MLIR dialects to FHE using "
-      "BGV.",
-      mlirToBgvPipelineBuilder);
-
-  PassPipelineRegistration<MlirToBgvPipelineOptions>(
+  PassPipelineRegistration<MlirToOpenFheBgvPipelineOptions>(
       "mlir-to-openfhe-bgv",
       "Convert a func using standard MLIR dialects to FHE using BGV and "
       "export "

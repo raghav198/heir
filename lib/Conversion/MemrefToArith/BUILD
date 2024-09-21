@@ -38,7 +38,6 @@ cc_library(
     deps = [
         ":Utils",
         ":pass_inc_gen",
-        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AffineAnalysis",
         "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:AffineUtils",

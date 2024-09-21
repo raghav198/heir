@@ -8,9 +8,6 @@ cc_library(
     srcs = ["Utils.cpp"],
     hdrs = ["Utils.h"],
     deps = [
-        "@heir//lib/Dialect/CGGI/IR:Dialect",
-        "@heir//lib/Dialect/LWE/IR:Dialect",
-        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:FuncDialect",

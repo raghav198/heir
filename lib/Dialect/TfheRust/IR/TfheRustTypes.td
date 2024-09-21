@@ -19,12 +19,8 @@ def PassByReference : NativeTypeTrait<"PassByReference"> {
   let cppNamespace = "::mlir::heir::tfhe_rust";
 }
 
-def EncryptedInteger : NativeTypeTrait<"EncryptedInteger"> {
-  let cppNamespace = "::mlir::heir::tfhe_rust";
-}
-
 class TfheRust_EncryptedUInt<int width>
-  : TfheRust_Type<"EncryptedUInt" # width, "eui" # width, [PassByReference, EncryptedInteger, MemRefElementTypeInterface]> {
+  : TfheRust_Type<"EncryptedUInt" # width, "eui" # width, [PassByReference, MemRefElementTypeInterface]> {
   let summary = "An encrypted unsigned integer corresponding to tfhe-rs's FHEUint" # width # " type";
 }
 
@@ -34,7 +30,7 @@ foreach i = [2, 3, 4, 8, 10, 12, 14, 16, 32, 64, 128, 256] in {
 }
 
 class TfheRust_EncryptedInt<int width>
-  : TfheRust_Type<"EncryptedInt" # width, "ei" # width, [PassByReference, EncryptedInteger]> {
+  : TfheRust_Type<"EncryptedInt" # width, "ei" # width, [PassByReference]> {
   let summary = "An encrypted signed integer corresponding to tfhe-rs's FHEInt" # width # " type";
 }
 

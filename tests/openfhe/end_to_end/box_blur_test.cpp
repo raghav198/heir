@@ -21,15 +21,21 @@ namespace mlir {
 namespace heir {
 namespace openfhe {
 
-TEST(BoxBlurTest, TestInput1) {
+TEST(BinopsTest, TestInput1) {
+  CCParams<CryptoContextBGVRNS> parameters;
+  parameters.SetMultiplicativeDepth(2);
   // needs to be large enough to accommodate overflow in the plaintext space
   // 786433 is the smallest prime p above 2**17 for which (p-1) / 65536 is an
   // integer.
-  auto cryptoContext = box_blur__generate_crypto_context();
-  auto keyPair = cryptoContext->KeyGen();
-  auto publicKey = keyPair.publicKey;
-  auto secretKey = keyPair.secretKey;
-  cryptoContext = box_blur__configure_crypto_context(cryptoContext, secretKey);
+  parameters.SetPlaintextModulus(786433);
+  CryptoContext<DCRTPoly> cryptoContext = GenCryptoContext(parameters);
+  cryptoContext->Enable(PKE);
+  cryptoContext->Enable(KEYSWITCH);
+  cryptoContext->Enable(LEVELEDSHE);
+
+  KeyPair<DCRTPoly> keyPair;
+  keyPair = cryptoContext->KeyGen();
+  cryptoContext->EvalRotateKeyGen(keyPair.secretKey, {65, 3968, 127, 4032, 63});
 
   int32_t n = cryptoContext->GetCryptoParameters()
                   ->GetElementParams()
