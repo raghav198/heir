@@ -54,8 +54,8 @@ OpType recursiveProduceBalancedTree(OpBuilder &builder, Location &loc,
     std::vector<Value> rightOperands;
     rightOperands.reserve(flattenedOperands.size() - leftSize);
 
-    for (int i = 0; i < flattenedOperands.size(); i++) {
-      if (i < leftSize) {
+    for (size_t i = 0; i < flattenedOperands.size(); i++) {
+      if (i < (size_t)leftSize) {
         leftOperands.push_back(flattenedOperands[i]);
       } else {
         rightOperands.push_back(flattenedOperands[i]);
@@ -153,7 +153,7 @@ void tryBalanceBlock(Block *block) {
     roots.push_back(&op);
   }
 
-  for (int i = 0; i < roots.size(); i++) {
+  for (size_t i = 0; i < roots.size(); i++) {
     std::vector<Operation *> deleteOpsOrder = deleteOpsOrderLists[i];
     std::vector<Value> operands = operandsLists[i];
     Operation *root = roots[i];
@@ -199,6 +199,8 @@ struct OperationBalancer : impl::OperationBalancerBase<OperationBalancer> {
       // the number of encodings.
       tryBalanceBlock<arith::AddIOp>(genericOp.getBody());
       tryBalanceBlock<arith::MulIOp>(genericOp.getBody());
+      tryBalanceBlock<arith::AddFOp>(genericOp.getBody());
+      tryBalanceBlock<arith::MulFOp>(genericOp.getBody());
     });
   }
 };

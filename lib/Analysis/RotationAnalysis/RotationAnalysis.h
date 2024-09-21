@@ -46,7 +46,7 @@ class PartialReduction {
     int64_t minIndex = *accessedIndices.begin();
     int64_t maxIndex = *accessedIndices.rbegin();
     return minIndex == 0 && maxIndex == tensorType.getShape()[0] - 1 &&
-           accessedIndices.size() == tensorType.getShape()[0];
+           accessedIndices.size() == (size_t)tensorType.getShape()[0];
   }
 
   const std::set<int64_t> &getAccessedIndices() const {
@@ -251,6 +251,10 @@ class RotationAnalysis {
   const std::vector<PartialReduction> &getRootedReductionsAt(
       Value value) const {
     return rootToPartialReductions.at(value);
+  }
+
+  const bool containsRootedReductions(Value value) const {
+    return rootToPartialReductions.contains(value);
   }
 
  private:

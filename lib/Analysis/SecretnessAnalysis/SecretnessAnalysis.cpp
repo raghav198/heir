@@ -11,7 +11,7 @@ namespace mlir {
 namespace heir {
 
 void SecretnessAnalysis::setToEntryState(SecretnessLattice *lattice) {
-  auto operand = lattice->getPoint();
+  auto operand = lattice->getAnchor();
   bool isSecret = isa<secret::SecretType>(operand.getType());
 
   Operation *operation = nullptr;
@@ -33,7 +33,7 @@ void SecretnessAnalysis::setToEntryState(SecretnessLattice *lattice) {
   propagateIfChanged(lattice, lattice->join(Secretness(isSecret)));
 }
 
-void SecretnessAnalysis::visitOperation(
+LogicalResult SecretnessAnalysis::visitOperation(
     Operation *operation, ArrayRef<const SecretnessLattice *> operands,
     ArrayRef<SecretnessLattice *> results) {
   auto resultSecretness = Secretness();
@@ -70,6 +70,7 @@ void SecretnessAnalysis::visitOperation(
   for (SecretnessLattice *result : results) {
     propagateIfChanged(result, result->join(resultSecretness));
   }
+  return mlir::success();
 }
 
 }  // namespace heir

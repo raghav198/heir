@@ -20,6 +20,7 @@
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"    // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
+#include "mlir/include/mlir/Dialect/Tensor/IR/Tensor.h"  // from @llvm-project
 #include "mlir/include/mlir/IR/AffineExpr.h"             // from @llvm-project
 #include "mlir/include/mlir/IR/Block.h"                  // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinAttributes.h"      // from @llvm-project
@@ -98,7 +99,8 @@ LogicalResult CollapseSecretlessGeneric::matchAndRewrite(
   //
   // There is no good way to identify an allocation op in general. Maybe we can
   // upstream a trait for this?
-  for ([[maybe_unused]] const auto op : op.getOps<memref::AllocOp>()) {
+  if (!op.getOps<tensor::EmptyOp>().empty() ||
+      !op.getOps<memref::AllocOp>().empty()) {
     return failure();
   }
 
@@ -113,7 +115,7 @@ LogicalResult RemoveUnusedGenericArgs::matchAndRewrite(
     GenericOp op, PatternRewriter &rewriter) const {
   bool hasUnusedOps = false;
   Block *body = op.getBody();
-  for (int i = 0; i < body->getArguments().size(); ++i) {
+  for (unsigned int i = 0; i < body->getArguments().size(); ++i) {
     BlockArgument arg = body->getArguments()[i];
     if (arg.use_empty()) {
       LLVM_DEBUG(llvm::dbgs() << arg << " has no uses; removing\n");
@@ -284,7 +286,7 @@ LogicalResult MergeAdjacentGenerics::matchAndRewrite(
   // it because the ops that use that operand will be moved inside the first
   // generic.
   DenseMap<Value, int> oldOperandsToNewOperandIndex;
-  for (int i = 0; i < nextGenericOp->getNumOperands(); ++i) {
+  for (size_t i = 0; i < nextGenericOp->getNumOperands(); ++i) {
     auto currOperand = nextGenericOp->getOperand(i);
     LLVM_DEBUG(llvm::dbgs() << "Trying to dedupe operand " << i << " in "
                             << *nextGenericOp << "\n");
@@ -295,7 +297,7 @@ LogicalResult MergeAdjacentGenerics::matchAndRewrite(
       continue;
     }
     bool found = false;
-    for (int j = 0; j < newOperands.size(); ++j) {
+    for (size_t j = 0; j < newOperands.size(); ++j) {
       if (currOperand == newOperands[j]) {
         LLVM_DEBUG(llvm::dbgs() << "Mapping to operand " << j << "\n");
         oldOperandsToNewOperandIndex[currOperand] = j;
@@ -407,7 +409,7 @@ LogicalResult YieldStoredMemrefs::matchAndRewrite(
       int index =
           std::find(yieldOperands.begin(), yieldOperands.end(), memref) -
           yieldOperands.begin();
-      if (index < genericOp.getYieldOp().getNumOperands()) {
+      if (index < (int)genericOp.getYieldOp().getNumOperands()) {
         // The memref is already yielded
         return WalkResult::advance();
       }
@@ -556,6 +558,10 @@ LogicalResult HoistPlaintextOps::matchAndRewrite(
 
   auto canHoist = [&](Operation &op) {
     if (isa<YieldOp>(op)) {
+      return false;
+    }
+    // complex op
+    if (op.getNumRegions() != 0) {
       return false;
     }
     LLVM_DEBUG(llvm::dbgs()
@@ -736,7 +742,7 @@ LogicalResult extractGenericBody(secret::GenericOp genericOp,
 
   // Map the input values to the block arguments.
   IRMapping mp;
-  for (int index = 0; index < inputs.size(); ++index) {
+  for (size_t index = 0; index < inputs.size(); ++index) {
     mp.map(inputs[index], block->getArgument(index));
   }
 

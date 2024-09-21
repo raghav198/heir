@@ -39,7 +39,7 @@ class CGGIToJaxiteTypeConverter : public TypeConverter {
  public:
   CGGIToJaxiteTypeConverter(MLIRContext *ctx) {
     addConversion([](Type type) { return type; });
-    addConversion([ctx](lwe::LWECiphertextType type) -> Type {
+    addConversion([](lwe::LWECiphertextType type) -> Type {
       if (widthFromEncodingAttr(type.getEncoding()) == 3) {
         return type;
       }
@@ -68,17 +68,12 @@ bool containsCGGIToJaxiteOps(func::FuncOp func) {
 // this op.
 template <typename JaxiteArgType>
 FailureOr<Value> getContextualJaxiteArg(Operation *op) {
-  for (auto block_arg : op->getParentOfType<func::FuncOp>()
-                            .getBody()
-                            .getBlocks()
-                            .front()
-                            .getArguments()) {
-    if (mlir::isa<JaxiteArgType>(block_arg.getType())) {
-      return block_arg;
-    }
+  auto result = getContextualArgFromFunc<JaxiteArgType>(op);
+  if (failed(result)) {
+    return op->emitOpError() << "Cannot find Jaxite server argument. Did the "
+                                "AddJaxiteContextualArgs pattern fail to run?";
   }
-  return op->emitOpError() << "Cannot find Jaxite server argument. Did the "
-                              "AddJaxiteContextualArgs pattern fail to run?";
+  return result.value();
 }
 
 /// Convert a func by adding contextual server args. Converted ops in other
@@ -150,7 +145,7 @@ struct ConvertCGGIToJaxiteLut3Op : public OpConversionPattern<cggi::Lut3Op> {
     // to jaxite to mirror jaxite API
     auto createLut3Op = rewriter.create<jaxite::Lut3Op>(
         op.getLoc(), typeConverter->convertType(op.getOutput().getType()),
-        adaptor.getC(), adaptor.getB(), adaptor.getA(), tt, serverKey, params);
+        adaptor.getA(), adaptor.getB(), adaptor.getC(), tt, serverKey, params);
     rewriter.replaceOp(op, createLut3Op);
     return success();
   }

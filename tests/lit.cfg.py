@@ -40,8 +40,12 @@ tool_relpaths = [
     "at_clifford_yosys",
 ]
 
+CMAKE_HEIR_PATH = os.environ.get("CMAKE_HEIR_PATH","")
+if CMAKE_HEIR_PATH:
+    CMAKE_HEIR_PATH = ":"+CMAKE_HEIR_PATH
 config.environment["PATH"] = (
     ":".join(str(runfiles_dir.joinpath(Path(path))) for path in tool_relpaths)
+    + CMAKE_HEIR_PATH
     + ":"
     + os.environ["PATH"]
 )
@@ -59,7 +63,7 @@ config.environment["HEIR_YOSYS_SCRIPTS_DIR"] = (
 # link against functions like print. Substitutions replace magic strings in the
 # test files with the needed paths.
 substitutions = {
-    "%mlir_lib_dir": mlir_tools_path,
+    "%mlir_lib_dir": str(mlir_tools_path),
     "%shlibext": ".so",
     "%mlir_runner_utils": os.path.join(
         mlir_tools_path, "libmlir_runner_utils.so"

@@ -14,6 +14,7 @@ cc_library(
     deps = [
         ":pass_inc_gen",
         "@heir//lib/Conversion:Utils",
+        "@heir//lib/Conversion/LWEToOpenfhe",
         "@heir//lib/Dialect/BGV/IR:Dialect",
         "@heir//lib/Dialect/LWE/IR:Dialect",
         "@heir//lib/Dialect/Openfhe/IR:Dialect",
@@ -23,6 +24,7 @@ cc_library(
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TensorDialect",
         "@llvm-project//mlir:TransformUtils",
     ],
 )
