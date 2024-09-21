@@ -718,12 +718,12 @@ int main(int argc, char **argv) {
   registerStraightLineVectorizerPasses();
   
   registerUnusedMemRefPasses();
-  registerLinalgCanonicalizationsPasses();
   registerMergeLUTsPasses();
   registerShrinkLutConstantsPasses();
   mlir::heir::cggi::registerCGGICanonicalizeToLutsPass();
   // comb::registerGateToLut();
 
+  registerLinalgCanonicalizationsPasses();
   // Register yosys optimizer pipeline if configured.
 #ifndef HEIR_NO_YOSYS
 #ifndef HEIR_ABC_BINARY
