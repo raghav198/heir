@@ -240,6 +240,7 @@ LogicalResult VerilogEmitter::translate(
               [&](auto op) { return printOperation(op); })
           .Case<UnrealizedConversionCastOp>(
               [&](auto op) { return printOperation(op); })
+          .Case<scf::IfOp>([&](auto op) { return printOperation(op); })
           .Default([&](Operation &) {
             return op.emitOpError("unable to find printer for op");
           });
@@ -886,6 +887,43 @@ LogicalResult VerilogEmitter::printOperation(
   return printFunctionLikeOp(op.getOperation(), name,
                              op.getRegion().getBlocks().front().getArguments(),
                              resultTypes, blocks->begin(), blocks->end());
+}
+
+LogicalResult VerilogEmitter::printOperation(mlir::scf::IfOp op) {
+  auto &thenBlocks = op.getThenRegion().getBlocks();
+  auto &elseBlocks = op.getElseRegion().getBlocks();
+
+  if (elseBlocks.size() != 1) {
+    op->emitError("Ciphertext condition must have else block!");
+    return failure();
+  }
+
+  auto &thenBlock = *thenBlocks.begin();
+  auto &elseBlock = *elseBlocks.begin();
+
+  for (auto &op : thenBlock.getOperations()) {
+    if (mlir::isa<scf::YieldOp>(op)) continue;
+    if (failed(translate(op, std::nullopt))) {
+      return failure();
+    }
+  }
+  for (auto &op : elseBlock.getOperations()) {
+    if (mlir::isa<scf::YieldOp>(op)) continue;
+    if (failed(translate(op, std::nullopt))) {
+      return failure();
+    }
+  }
+
+  auto thenYield = mlir::cast<scf::YieldOp>(thenBlock.getTerminator());
+  auto elseYield = mlir::cast<scf::YieldOp>(elseBlock.getTerminator());
+
+  for (int i = 0; i < op->getNumResults(); i++) {
+    emitAssignPrefix(op->getResult(i));
+    os_ << getOrCreateName(op.getCondition()) << " ? "
+        << getOrCreateName(thenYield->getOperand(i)) << " : "
+        << getOrCreateName(elseYield->getOperand(i)) << ";\n";
+  }
+  return success();
 }
 
 LogicalResult VerilogEmitter::emitType(Type type) {

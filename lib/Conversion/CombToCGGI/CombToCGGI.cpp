@@ -277,10 +277,33 @@ class SecretGenericOpLUTConversion
     // Assemble the lookup table.
     comb::TruthTableOp truthOp =
         cast<comb::TruthTableOp>(op.getBody()->getOperations().front());
-    rewriter.replaceOpWithNewOp<cggi::Lut3Op>(
+    
+    // llvm::dbgs() << "Translating " << truthOp << "\n";
+    // llvm::dbgs() << "Attributes: ";
+    // for (auto attr : truthOp->getAttrs()) llvm::dbgs() << attr.getName() << " -> " << attr.getValue() << "\n";
+
+    if (truthOp->hasAttr("coefficients") && truthOp->hasAttr("prepped_lut")) {
+      auto newOp = rewriter.replaceOpWithNewOp<cggi::LutLinCombOp>(op, encodedInputs);
+      newOp->setAttr("coefficients", truthOp->getAttr("coefficients"));
+      newOp->setAttr("lookup_table", truthOp->getAttr("prepped_lut"));
+    } else if (encodedInputs.size() == 2) {
+      rewriter.replaceOpWithNewOp<cggi::Lut2Op>(
+        op, encodedInputs[0], encodedInputs[1], 
+        truthOp.getLookupTable());
+    } else if (encodedInputs.size() == 3) {
+      rewriter.replaceOpWithNewOp<cggi::Lut3Op>(
         op, encodedInputs[0], encodedInputs[1], encodedInputs[2],
         truthOp.getLookupTable());
-    return success();
+    } else {
+      auto newOp = rewriter.replaceOpWithNewOp<cggi::LutLinCombOp>(op, encodedInputs);
+      mlir::SmallVector<int> coefficients;
+      coefficients.reserve(encodedInputs.size());
+      for (int i = 0; i < encodedInputs.size(); i++) {
+        coefficients.push_back(1 << i);
+      }
+      newOp->setAttr("coefficients", rewriter.getDenseI32ArrayAttr(coefficients));
+      newOp->setAttr("lookup_table", truthOp.getLookupTable());
+    }
   }
 };
 

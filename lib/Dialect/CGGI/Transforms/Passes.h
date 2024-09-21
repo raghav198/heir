@@ -4,6 +4,7 @@
 #include "lib/Dialect/CGGI/IR/CGGIDialect.h"
 #include "lib/Dialect/CGGI/Transforms/BooleanLineVectorizer.h"
 #include "lib/Dialect/CGGI/Transforms/SetDefaultParameters.h"
+#include "lib/Dialect/CGGI/Transforms/CGGICanonicalizeToLuts.h"
 
 namespace mlir {
 namespace heir {

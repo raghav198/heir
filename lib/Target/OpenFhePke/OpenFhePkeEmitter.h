@@ -6,7 +6,6 @@
 #include "lib/Analysis/SelectVariableNames/SelectVariableNames.h"
 #include "lib/Dialect/LWE/IR/LWEOps.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheOps.h"
-#include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinOps.h"            // from @llvm-project
@@ -17,6 +16,7 @@
 #include "mlir/include/mlir/Support/IndentedOstream.h"  // from @llvm-project
 #include "mlir/include/mlir/Support/LLVM.h"             // from @llvm-project
 #include "mlir/include/mlir/Support/LogicalResult.h"    // from @llvm-project
+#include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
 
 namespace mlir {
 namespace heir {
@@ -32,9 +32,9 @@ class OpenFhePkeEmitter {
  public:
   OpenFhePkeEmitter(raw_ostream &os, SelectVariableNames *variableNames);
 
-  LogicalResult translate(::mlir::Operation &operation);
+  virtual LogicalResult translate(::mlir::Operation &operation);
 
- private:
+ protected:
   /// Output stream to emit to.
   raw_indented_ostream os;
 

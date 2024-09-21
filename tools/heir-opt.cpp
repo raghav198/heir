@@ -6,6 +6,8 @@
 #include "lib/Conversion/BGVToLWE/BGVToLWE.h"
 #include "lib/Conversion/BGVToOpenfhe/BGVToOpenfhe.h"
 #include "lib/Conversion/CGGIToJaxite/CGGIToJaxite.h"
+#include "lib/Conversion/BGVToPolynomial/BGVToPolynomial.h"
+#include "lib/Conversion/CGGIToOpenfhe/CGGIToOpenfhe.h"
 #include "lib/Conversion/CGGIToTfheRust/CGGIToTfheRust.h"
 #include "lib/Conversion/CGGIToTfheRustBool/CGGIToTfheRustBool.h"
 #include "lib/Conversion/CombToCGGI/CombToCGGI.h"
@@ -19,9 +21,12 @@
 #include "lib/Conversion/TosaToSecretArith/TosaToSecretArith.h"
 #include "lib/Dialect/BGV/IR/BGVDialect.h"
 #include "lib/Dialect/CGGI/IR/CGGIDialect.h"
+#include "lib/Dialect/CGGI/Transforms/CGGICanonicalizeToLuts.h"
 #include "lib/Dialect/CGGI/Transforms/Passes.h"
 #include "lib/Dialect/CKKS/IR/CKKSDialect.h"
 #include "lib/Dialect/Comb/IR/CombDialect.h"
+#include "lib/Dialect/Comb/Transforms/GateToLut.h"
+#include "lib/Dialect/Comb/Transforms/Passes.h"
 #include "lib/Dialect/Jaxite/IR/JaxiteDialect.h"
 #include "lib/Dialect/LWE/IR/LWEDialect.h"
 #include "lib/Dialect/LWE/Transforms/AddClientInterface.h"
@@ -57,11 +62,11 @@
 #include "lib/Transforms/FullLoopUnroll/FullLoopUnroll.h"
 #include "lib/Transforms/LinalgCanonicalizations/LinalgCanonicalizations.h"
 #include "lib/Transforms/OperationBalancer/OperationBalancer.h"
+#include "lib/Transforms/MergeLUTs/MergeLUTs.h"
 #include "lib/Transforms/Secretize/Passes.h"
+#include "lib/Transforms/ShrinkLutConstants/ShrinkLutConstants.h"
 #include "lib/Transforms/StraightLineVectorizer/StraightLineVectorizer.h"
 #include "lib/Transforms/UnusedMemRef/UnusedMemRef.h"
-#include "llvm/include/llvm/Support/CommandLine.h"  // from @llvm-project
-#include "llvm/include/llvm/Support/raw_ostream.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/AffineToStandard/AffineToStandard.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/ArithToLLVM/ArithToLLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/BufferizationToMemRef/BufferizationToMemRef.h"  // from @llvm-project
@@ -111,6 +116,8 @@
 #include "mlir/include/mlir/Pass/PassRegistry.h"           // from @llvm-project
 #include "mlir/include/mlir/Tools/mlir-opt/MlirOptMain.h"  // from @llvm-project
 #include "mlir/include/mlir/Transforms/Passes.h"           // from @llvm-project
+#include "llvm/include/llvm/Support/CommandLine.h"  // from @llvm-project
+#include "llvm/include/llvm/Support/raw_ostream.h"  // from @llvm-project
 
 #ifndef HEIR_NO_YOSYS
 #include "lib/Transforms/YosysOptimizer/YosysOptimizer.h"
@@ -445,6 +452,11 @@ void tosaToBooleanFpgaTfhePipeline(const std::string &yosysFilesPath,
         pm.addPass(createCanonicalizerPass());
         pm.addPass(createCSEPass());
         pm.addPass(createSCCPPass());
+
+        pm.addPass(createMergeLUTs());
+        pm.addPass(createShrinkLutConstants());
+        pm.addPass(mlir::heir::cggi::createCGGICanonicalizeToLuts());
+
       });
 }
 
@@ -689,6 +701,7 @@ int main(int argc, char **argv) {
   lwe::registerLWEPasses();
   ::mlir::heir::polynomial::registerPolynomialPasses();
   secret::registerSecretPasses();
+  
   tensor_ext::registerTensorExtPasses();
   openfhe::registerOpenfhePasses();
   registerElementwiseToAffinePasses();
@@ -703,8 +716,14 @@ int main(int argc, char **argv) {
   registerForwardStoreToLoadPasses();
   registerOperationBalancerPasses();
   registerStraightLineVectorizerPasses();
+  
   registerUnusedMemRefPasses();
   registerLinalgCanonicalizationsPasses();
+  registerMergeLUTsPasses();
+  registerShrinkLutConstantsPasses();
+  mlir::heir::cggi::registerCGGICanonicalizeToLutsPass();
+  comb::registerGateToLut();
+
   // Register yosys optimizer pipeline if configured.
 #ifndef HEIR_NO_YOSYS
 #ifndef HEIR_ABC_BINARY
@@ -741,6 +760,7 @@ int main(int argc, char **argv) {
   registerCGGIToJaxitePasses();
   registerCGGIToTfheRustPasses();
   registerCGGIToTfheRustBoolPasses();
+  registerCGGIToOpenfhePasses();
   registerSecretToBGVPasses();
   registerSecretToCKKSPasses();
   mlir::heir::tosa::registerTosaToSecretArithPasses();
