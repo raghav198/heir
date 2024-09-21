@@ -10,7 +10,7 @@ cc_library(
     hdrs = ["Passes.h"],
     deps = [
         ":BooleanLineVectorizer",
-        ":SetDefaultParameters",
+        # ":SetDefaultParameters",
         ":CGGICanonicalizeToLuts",
         ":pass_inc_gen",
         "@heir//lib/Dialect/CGGI/IR:Dialect",

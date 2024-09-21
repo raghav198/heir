@@ -6,7 +6,7 @@
 #include "lib/Conversion/BGVToLWE/BGVToLWE.h"
 #include "lib/Conversion/BGVToOpenfhe/BGVToOpenfhe.h"
 #include "lib/Conversion/CGGIToJaxite/CGGIToJaxite.h"
-#include "lib/Conversion/BGVToPolynomial/BGVToPolynomial.h"
+// #include "lib/Conversion/BGVToPolynomial/BGVToPolynomial.h"
 #include "lib/Conversion/CGGIToOpenfhe/CGGIToOpenfhe.h"
 #include "lib/Conversion/CGGIToTfheRust/CGGIToTfheRust.h"
 #include "lib/Conversion/CGGIToTfheRustBool/CGGIToTfheRustBool.h"
@@ -25,8 +25,8 @@
 #include "lib/Dialect/CGGI/Transforms/Passes.h"
 #include "lib/Dialect/CKKS/IR/CKKSDialect.h"
 #include "lib/Dialect/Comb/IR/CombDialect.h"
-#include "lib/Dialect/Comb/Transforms/GateToLut.h"
-#include "lib/Dialect/Comb/Transforms/Passes.h"
+// #include "lib/Dialect/Comb/Transforms/GateToLut.h"
+// #include "lib/Dialect/Comb/Transforms/Passes.h"
 #include "lib/Dialect/Jaxite/IR/JaxiteDialect.h"
 #include "lib/Dialect/LWE/IR/LWEDialect.h"
 #include "lib/Dialect/LWE/Transforms/AddClientInterface.h"
@@ -722,7 +722,7 @@ int main(int argc, char **argv) {
   registerMergeLUTsPasses();
   registerShrinkLutConstantsPasses();
   mlir::heir::cggi::registerCGGICanonicalizeToLutsPass();
-  comb::registerGateToLut();
+  // comb::registerGateToLut();
 
   // Register yosys optimizer pipeline if configured.
 #ifndef HEIR_NO_YOSYS
