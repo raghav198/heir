@@ -19,8 +19,8 @@
 #include "lib/Dialect/CGGI/Transforms/CGGICanonicalizeToLuts.h"
 #include "lib/Dialect/CGGI/Transforms/Passes.h"
 #include "lib/Dialect/Comb/IR/CombDialect.h"
-#include "lib/Dialect/Comb/Transforms/GateToLut.h"
-#include "lib/Dialect/Comb/Transforms/Passes.h"
+// #include "lib/Dialect/Comb/Transforms/GateToLut.h"
+// #include "lib/Dialect/Comb/Transforms/Passes.h"
 #include "lib/Dialect/Jaxite/IR/JaxiteDialect.h"
 #include "lib/Dialect/LWE/IR/LWEDialect.h"
 #include "lib/Dialect/LWE/Transforms/Passes.h"
@@ -523,7 +523,7 @@ int main(int argc, char **argv) {
   registerMergeLUTsPasses();
   registerShrinkLutConstantsPasses();
   mlir::heir::cggi::registerCGGICanonicalizeToLutsPass();
-  comb::registerGateToLut();
+  // comb::registerGateToLut();
 
   // Register yosys optimizer pipeline if configured.
 #ifndef HEIR_NO_YOSYS
