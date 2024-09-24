@@ -1,6 +1,7 @@
 #include "lib/Target/OpenFhePke/OpenFheUtils.h"
 
 #include <string>
+#include <iostream>
 
 #include "lib/Dialect/LWE/IR/LWETypes.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheTypes.h"
@@ -13,6 +14,7 @@
 #include "mlir/include/mlir/Support/LogicalResult.h"    // from @llvm-project
 #include "llvm/include/llvm/ADT/TypeSwitch.h"           // from @llvm-project
 #include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
+#include "llvm/include/llvm/Support/Debug.h"            // from @llvm-project
 
 namespace mlir {
 namespace heir {
@@ -43,27 +45,35 @@ FailureOr<std::string> convertType(Type type) {
       .Case<IndexType>([&](auto ty) { return std::string("size_t"); })
       .Case<IntegerType>([&](auto ty) {
         auto width = ty.getWidth();
-        if (width != 8 && width != 16 && width != 32 && width != 64) {
+        if (width != 1 && width != 8 && width != 16 && width != 32 && width != 64) {
           return FailureOr<std::string>();
         }
         SmallString<8> result;
         llvm::raw_svector_ostream os(result);
-        os << "int" << width << "_t";
+        if (width == 1) os << "bool";
+        else os << "int" << width << "_t";
         return FailureOr<std::string>(std::string(result));
       })
       .Case<RankedTensorType>([&](auto ty) {
-        if (ty.getRank() != 1) {
-          return FailureOr<std::string>();
-        }
+        // if (ty.getRank() != 1) {
+        //   return FailureOr<std::string>();
+        // }
 
         auto eltTyResult = convertType(ty.getElementType());
         if (failed(eltTyResult)) {
+          llvm::dbgs() << "Element type conversion failed\n";
           return FailureOr<std::string>();
         }
 
         SmallString<8> result;
         llvm::raw_svector_ostream os(result);
-        os << "std::vector<" << eltTyResult.value() << ">";
+        for (int i = 0; i < ty.getRank(); i++) {
+          os << "std::vector<";
+        }
+        os << eltTyResult.value();
+        for (int i = 0; i < ty.getRank(); i++) {
+          os << ">";
+        }
         return FailureOr<std::string>(std::string(result));
       })
       .Case<MemRefType>([&](MemRefType ty) {

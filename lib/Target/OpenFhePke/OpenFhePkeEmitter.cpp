@@ -19,7 +19,7 @@
 #include "llvm/include/llvm/ADT/STLExtras.h"            // from @llvm-project
 #include "llvm/include/llvm/ADT/StringExtras.h"         // from @llvm-project
 #include "llvm/include/llvm/ADT/TypeSwitch.h"           // from @llvm-project
-#include "llvm/include/llvm/Support/Debug.h"      // from @llvm-project
+#include "llvm/include/llvm/Support/Debug.h"            // from @llvm-project
 #include "llvm/include/llvm/Support/FormatVariadic.h"   // from @llvm-project
 #include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"   // from @llvm-project
@@ -69,7 +69,7 @@ LogicalResult OpenFhePkeEmitter::translate(Operation &op) {
           // Builtin ops
           .Case<ModuleOp>([&](auto op) { return printOperation(op); })
           // Func ops
-          .Case<func::FuncOp, func::ReturnOp>(
+          .Case<func::FuncOp, func::ReturnOp, func::CallOp>(
               [&](auto op) { return printOperation(op); })
           // Arith ops
           .Case<arith::ConstantOp, arith::ExtSIOp, arith::IndexCastOp>(
@@ -83,6 +83,9 @@ LogicalResult OpenFhePkeEmitter::translate(Operation &op) {
                 RotOp, AutomorphOp, KeySwitchOp, EncryptOp, DecryptOp,
                 GenParamsOp, GenContextOp, GenMulKeyOp, GenRotKeyOp,
                 MakePackedPlaintextOp>(
+              [&](auto op) { return printOperation(op); })
+          // Arith ops
+          .Case<arith::AddIOp, arith::SubIOp, arith::MulIOp, arith::CmpIOp, arith::FloorDivSIOp>(
               [&](auto op) { return printOperation(op); })
           .Default([&](Operation &) {
             return op.emitOpError("unable to find printer for op");
@@ -103,6 +106,14 @@ LogicalResult OpenFhePkeEmitter::printOperation(ModuleOp moduleOp) {
     }
   }
 
+  return success();
+}
+
+LogicalResult OpenFhePkeEmitter::printOperation(func::CallOp op) {
+  emitAutoAssignPrefix(op.getResult(0));
+  os << op.getCallee() << "(";
+  os << commaSeparatedValues(op.getArgOperands(), [this](auto arg) { return variableNames->getNameForValue(arg); });
+  os << ")\n";
   return success();
 }
 
@@ -253,8 +264,8 @@ LogicalResult OpenFhePkeEmitter::printOperation(RotOp op) {
   emitAutoAssignPrefix(op.getResult());
 
   os << variableNames->getNameForValue(op.getCryptoContext()) << "->"
-     << "EvalRotate" << "("
-     << variableNames->getNameForValue(op.getCiphertext()) << ", "
+     << "EvalRotate"
+     << "(" << variableNames->getNameForValue(op.getCiphertext()) << ", "
      << op.getIndex().getValue() << ");\n";
   return success();
 }
@@ -358,6 +369,68 @@ LogicalResult OpenFhePkeEmitter::printOperation(arith::IndexCastOp op) {
   }
   os << ">(" << variableNames->getNameForValue(op.getIn()) << ");\n";
   return success();
+}
+
+LogicalResult OpenFhePkeEmitter::printBinaryOp(::mlir::Value result,
+                                               ::mlir::Value lhs,
+                                               ::mlir::Value rhs,
+                                               const std::string& op) {
+  if (failed(emitTypedAssignPrefix(result))) {
+    llvm::dbgs() << "Type emit failed\n";
+    return failure();
+  }
+  os << variableNames->getNameForValue(lhs) << " " << op << " "
+     << variableNames->getNameForValue(rhs) << ";\n";
+  return success();
+}
+
+LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::SubIOp op) {
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "-");
+}
+LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::AddIOp op) {
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "+");
+}
+LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::MulIOp op) {
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "*");
+}
+LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::FloorDivSIOp op) {
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "/");
+}
+LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::CmpIOp op) {
+  std::string cmp;
+  switch (op.getPredicate()) {
+    case arith::CmpIPredicate::eq:
+      cmp = "==";
+      break;
+    case arith::CmpIPredicate::ne:
+      cmp = "!=";
+      break;
+    case arith::CmpIPredicate::slt:
+      cmp = "<";
+      break;
+    case arith::CmpIPredicate::sle:
+      cmp = "<=";
+      break;
+    case arith::CmpIPredicate::sgt:
+      cmp = ">";
+      break;
+    case arith::CmpIPredicate::sge:
+      cmp = ">=";
+      break;
+    case arith::CmpIPredicate::ult:
+      cmp = "<";
+      break;
+    case arith::CmpIPredicate::ule:
+      cmp = "<=";
+      break;
+    case arith::CmpIPredicate::ugt:
+      cmp = ">";
+      break;
+    case arith::CmpIPredicate::uge:
+      cmp = ">=";
+      break;
+  }
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), cmp);
 }
 
 LogicalResult OpenFhePkeEmitter::printOperation(

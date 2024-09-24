@@ -85,6 +85,7 @@ cc_library(
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:SCFDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:PolynomialDialect",
         "@llvm-project//mlir:Support",
