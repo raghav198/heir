@@ -92,6 +92,7 @@ cc_binary(
         "@heir//lib/Transforms/Secretize",
         "@heir//lib/Transforms/StraightLineVectorizer",
         "@heir//lib/Transforms/UnusedMemRef",
+        "@heir//lib/Transforms/UnrollSecretLoops",
         "@heir//lib/Transforms/MergeLUTs",
         "@heir//lib/Transforms/ShrinkLutConstants",
         "@heir//lib/Dialect/CGGI/Transforms:CGGICanonicalizeToLuts",

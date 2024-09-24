@@ -66,6 +66,7 @@
 #include "lib/Transforms/Secretize/Passes.h"
 #include "lib/Transforms/ShrinkLutConstants/ShrinkLutConstants.h"
 #include "lib/Transforms/StraightLineVectorizer/StraightLineVectorizer.h"
+#include "lib/Transforms/UnrollSecretLoops/UnrollSecretLoops.h"
 #include "lib/Transforms/UnusedMemRef/UnusedMemRef.h"
 #include "mlir/include/mlir/Conversion/AffineToStandard/AffineToStandard.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/ArithToLLVM/ArithToLLVM.h"  // from @llvm-project
@@ -720,6 +721,7 @@ int main(int argc, char **argv) {
   registerUnusedMemRefPasses();
   registerMergeLUTsPasses();
   registerShrinkLutConstantsPasses();
+  registerUnrollSecretLoopsPasses();
   mlir::heir::cggi::registerCGGICanonicalizeToLutsPass();
   // comb::registerGateToLut();
 
