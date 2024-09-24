@@ -304,6 +304,7 @@ class SecretGenericOpLUTConversion
       newOp->setAttr("coefficients", rewriter.getDenseI32ArrayAttr(coefficients));
       newOp->setAttr("lookup_table", truthOp.getLookupTable());
     }
+    return success();
   }
 };
 
