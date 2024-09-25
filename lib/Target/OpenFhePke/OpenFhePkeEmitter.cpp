@@ -113,7 +113,7 @@ LogicalResult OpenFhePkeEmitter::printOperation(func::CallOp op) {
   emitAutoAssignPrefix(op.getResult(0));
   os << op.getCallee() << "(";
   os << commaSeparatedValues(op.getArgOperands(), [this](auto arg) { return variableNames->getNameForValue(arg); });
-  os << ")\n";
+  os << ");\n";
   return success();
 }
 

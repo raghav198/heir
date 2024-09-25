@@ -11,6 +11,8 @@
 #include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
+#include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/include/mlir/Dialect/SCF/IR/SCF.h"       // from @llvm-project
 #include "mlir/include/mlir/Dialect/Polynomial/IR/PolynomialDialect.h"  // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinAttributes.h"   // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinOps.h"          // from @llvm-project
@@ -38,7 +40,7 @@ void registerToOpenFhePkeHeaderTranslation() {
       [](DialectRegistry &registry) {
         registry.insert<arith::ArithDialect, func::FuncDialect,
                         openfhe::OpenfheDialect, lwe::LWEDialect,
-                        ::mlir::polynomial::PolynomialDialect>();
+                        ::mlir::polynomial::PolynomialDialect, scf::SCFDialect, memref::MemRefDialect>();
       });
 }
 

@@ -64,16 +64,16 @@ LWECiphertext copy(LWECiphertext ctxt) {
 
 // I'm done apologizing...
 struct view_t {
-  int offset;
-  int stride;
-  int size;
+    int offset;
+    int stride;
+    int size;
 
-  view_t(int offset, int stride, int size) : offset(offset), stride(stride), size(size) {}
-  void apply(view_t other) {
-      offset += other.offset * stride;
-      stride *= other.stride;
-      size = other.size;
-  }
+    view_t(int offset, int stride, int size) : offset(offset), stride(stride), size(size) {}
+    void apply(view_t other) {
+        offset += other.offset * stride;
+        stride *= other.stride;
+        size = other.size;
+    }
 };
 
 template<class T>
@@ -86,77 +86,108 @@ template<class T>
 constexpr int dim<std::vector<T>&> = 1 + dim<T>;
 
 template <class T>
+struct underlying {
+    using type = T;
+};
+
+template <class T>
+struct underlying<std::vector<T>> {
+    using type = typename underlying<T>::type;
+};
+
+template <class T>
 class vector_view;
 
 template <class T>
 class vector_view<std::vector<T>> {
-  std::vector<T>& data;
-  std::vector<T> owned_data;
-  std::vector<view_t> views;
+    std::vector<T>& data;
+    std::vector<T> owned_data;
+    std::vector<view_t> views;
 public:
-  vector_view(std::vector<T>& data, std::vector<view_t> views) : data(data), views(views) {}
-  vector_view(std::vector<T>& data) : data(data) {
-    for (int i = 0; i < dim<std::vector<T>>; i++) {
-      views.emplace_back(0, 1, -1);
+    using underlying_t = typename underlying<T>::type;
+    vector_view(std::vector<T>& data, std::vector<view_t> views) : data(data), views(views) {}
+    vector_view(std::vector<T>& data) : data(data) {
+        for (int i = 0; i < dim<std::vector<T>>; i++) {
+            views.emplace_back(0, 1, -1);
+        }
     }
-  }
-  vector_view(std::initializer_list<T> elems) : data(owned_data), owned_data(elems) {
-    for (int i = 0; i < dim<decltype(data)>; i++) {
-      views.emplace_back(0, 1, -1);
+    vector_view(std::initializer_list<T> elems) : data(owned_data), owned_data(elems) {
+        for (int i = 0; i < dim<decltype(data)>; i++) {
+            views.emplace_back(0, 1, -1);
+        }
     }
-  }
 
-  vector_view(const vector_view<T>& other) : data(other.data), views(other.views) {}
+    vector_view(const vector_view<T>& other) : data(other.data), views(other.views) {}
 
-  constexpr int rank() {
-    return dim<decltype(data)>;
-  }
-
-  size_t size() const {
-    if (views[0].size == -1) return data.size();
-    return views[0].size;
-  }
-
-  auto operator[](size_t index) {
-    auto& vec = data[views[0].offset + index * views[0].stride];
-    if constexpr (dim<decltype(data)> == 1) {
-      return vec;
-    } else {
-      vector_view<T> new_view(vec, std::vector<view_t>(views.begin() + 1, views.end()));
-      return new_view;
+    constexpr int rank() {
+        return dim<decltype(data)>;
     }
-  }
 
-  auto operator[](size_t index) const {
-    auto& vec = data[views[0].offset + index * views[0].stride];
-    if constexpr (dim<decltype(data)> == 1) {
-      return vec;
-    } else {
-      vector_view<T> new_view(vec, std::vector<view_t>(views.begin() + 1, views.end()));
-      return new_view;
+    size_t size() const {
+        if (views[0].size == -1) return data.size();
+        return views[0].size;
     }
-  }
 
-
-  auto subview(std::vector<view_t> slices) {
-    auto copied = *this;
-    for (int i = 0; i < slices.size(); i++) {
-      copied.views[i].apply(slices[i]);
+    auto operator[](size_t index) {
+        auto& vec = data[views[0].offset + index * views[0].stride];
+        if constexpr (dim<decltype(data)> == 1) {
+            return vec;
+        } else {
+            vector_view<T> new_view(vec, std::vector<view_t>(views.begin() + 1, views.end()));
+            return new_view;
+        }
     }
-    return copied;
-  }
 
-  std::vector<T> copy() const {
-    std::vector<T> copied;
-    for (int i = 0; i < size(); i++) {
-      if constexpr (dim<decltype(data)> == 1) {
-        copied.push_back(this->operator[](i));
-      } else {
-        copied.push_back(this->operator[](i).copy());
-      }
+    auto operator[](size_t index) const {
+        auto& vec = data[views[0].offset + index * views[0].stride];
+        if constexpr (dim<decltype(data)> == 1) {
+            return vec;
+        } else {
+            vector_view<T> new_view(vec, std::vector<view_t>(views.begin() + 1, views.end()));
+            return new_view;
+        }
     }
-    return copied;
-  }
+
+    auto subview(std::vector<view_t> slices) {
+        auto copied = *this;
+        for (int i = 0; i < slices.size(); i++) {
+            copied.views[i].apply(slices[i]);
+        }
+        return copied;
+    }
+
+    std::vector<T> copy() const {
+        std::vector<T> copied;
+        for (int i = 0; i < size(); i++) {
+            if constexpr (dim<decltype(data)> == 1) {
+                copied.push_back(this->operator[](i));
+            } else {
+                copied.push_back(this->operator[](i).copy());
+            }
+        }
+        return copied;
+    }
+
+    void flatten_into(std::vector<underlying_t>& dest, int *index = nullptr) const {
+        int local_index = 0;
+        if (index == nullptr) {
+            index = &local_index;
+        }
+        for (int i = 0; i < size(); i++) {
+            if constexpr (dim<decltype(data)> == 1) {
+                dest[(*index)++] = this->operator[](i);
+            } else {
+                this->operator[](i).flatten_into(dest, index);
+            }
+        }
+    }
+    
+};
+
+template <class T>
+class vector_view<std::vector<T>&> : public vector_view<std::vector<T>> {
+public:
+    vector_view(std::vector<T>& data) : vector_view<std::vector<T>>(data) {}
 };
 
 )cpp";
@@ -297,14 +328,15 @@ LogicalResult OpenFheBinEmitter::printOperation(memref::SubViewOp subview) {
       [&](const std::string &a, const std::string &b) { return a + ", " + b; });
 
   emitAutoAssignPrefix(subview.getResult());
-  os << variableNames->getNameForValue(subview.getSource()) << ".subview({" << args << "});\n";
+  std::string sourceName = variableNames->getNameForValue(subview.getSource());
+  os << "vector_view<decltype(" << sourceName << ")>(" << sourceName << ").subview({" << args << "});\n";
   return success();
   
 }
 
 LogicalResult OpenFheBinEmitter::printOperation(memref::CopyOp copy) {
-  os << variableNames->getNameForValue(copy.getTarget()) << " = ";
-  os << variableNames->getNameForValue(copy.getSource()) << ".copy()\n";
+  os << variableNames->getNameForValue(copy.getSource()) << ".flatten_into(";
+  os << variableNames->getNameForValue(copy.getTarget()) << ");\n";
   return success();
 }
 
@@ -369,8 +401,8 @@ LogicalResult OpenFheBinEmitter::printOperation(scf::IfOp ifOp) {
   os.indent();
   for (auto &op : thenBlock.getOperations()) {
     if (auto yieldOp = mlir::dyn_cast<scf::YieldOp>(op)) {
-      os << resultName << " = "
-         << variableNames->getNameForValue(yieldOp->getOperand(0)) << ";\n";
+      os << resultName << " = std::move("
+         << variableNames->getNameForValue(yieldOp->getOperand(0)) << ");\n";
     } else {
       if (failed(translate(op))) return failure();
     }
@@ -380,8 +412,8 @@ LogicalResult OpenFheBinEmitter::printOperation(scf::IfOp ifOp) {
   os.indent();
   for (auto &op : elseBlock.getOperations()) {
     if (auto yieldOp = mlir::dyn_cast<scf::YieldOp>(op)) {
-      os << resultName << " = "
-         << variableNames->getNameForValue(yieldOp->getOperand(0)) << ";\n";
+      os << resultName << " = std::move("
+         << variableNames->getNameForValue(yieldOp->getOperand(0)) << ");\n";
     } else {
       if (failed(translate(op))) return failure();
     }
