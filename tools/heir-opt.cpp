@@ -10,6 +10,7 @@
 #include "lib/Conversion/CGGIToOpenfhe/CGGIToOpenfhe.h"
 #include "lib/Conversion/CGGIToTfheRust/CGGIToTfheRust.h"
 #include "lib/Conversion/CGGIToTfheRustBool/CGGIToTfheRustBool.h"
+#include "lib/Conversion/CKKSToOpenfhe/CKKSToOpenfhe.h"
 #include "lib/Conversion/CombToCGGI/CombToCGGI.h"
 #include "lib/Conversion/LWEToPolynomial/LWEToPolynomial.h"
 #include "lib/Conversion/LinalgToTensorExt/LinalgToTensorExt.h"
@@ -755,6 +756,7 @@ int main(int argc, char **argv) {
   mod_arith::registerModArithToArithPasses();
   bgv::registerBGVToLWEPasses();
   bgv::registerBGVToOpenfhePasses();
+  ckks::registerCKKSToOpenfhePasses();
   comb::registerCombToCGGIPasses();
   lwe::registerLWEToPolynomialPasses();
   ::mlir::heir::linalg::registerLinalgToTensorExtPasses();

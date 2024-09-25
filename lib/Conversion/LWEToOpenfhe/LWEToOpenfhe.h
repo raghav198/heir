@@ -25,20 +25,25 @@ struct ConvertDecryptOp : public OpConversionPattern<lwe::RLWEDecryptOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(lwe::RLWEDecryptOp op, OpAdaptor adaptor,
-                                ConversionPatternRewriter &rewriter) const;
+  LogicalResult matchAndRewrite(
+      lwe::RLWEDecryptOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override;
 };
 
+// ConvertEncodeOp takes a boolean parameter indicating whether the
+// MakeCKKSPackedPlaintext should be used over the regular MakePackedPlaintext.
 struct ConvertEncodeOp : public OpConversionPattern<lwe::RLWEEncodeOp> {
-  ConvertEncodeOp(mlir::MLIRContext *context)
-      : OpConversionPattern<lwe::RLWEEncodeOp>(context) {}
+  explicit ConvertEncodeOp(const mlir::TypeConverter &typeConverter,
+                           mlir::MLIRContext *context, bool ckks)
+      : mlir::OpConversionPattern<lwe::RLWEEncodeOp>(typeConverter, context),
+        ckks_(ckks) {}
 
-  using OpConversionPattern::OpConversionPattern;
+  LogicalResult matchAndRewrite(
+      lwe::RLWEEncodeOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override;
 
-  // OpenFHE has a convention that all inputs to MakePackedPlaintext are
-  // std::vector<int64_t>, so we need to cast the input to that type.
-  LogicalResult matchAndRewrite(lwe::RLWEEncodeOp op, OpAdaptor adaptor,
-                                ConversionPatternRewriter &rewriter) const;
+ private:
+  bool ckks_;
 };
 
 }  // namespace mlir::heir::lwe

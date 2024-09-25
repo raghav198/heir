@@ -132,6 +132,7 @@ function(make_heiropt_exec  TARGET_NAME SOURCES)
         MLIRHeiElementwiseToAffine
         MLIRHeirForwardStoreToLoad
         MLIRHeirFullLoopUnroll
+        MLIRHeirLinalgCanonicalizations
         MLIRHeirSecretize
         MLIRHeirStraightLineVectorizer
 
@@ -145,13 +146,15 @@ function(make_heiropt_exec  TARGET_NAME SOURCES)
         MLIRMemrefToArithExpandCopy
         MLIRMemrefToArithMemrefGlobalReplace
         MLIRBGVOpenfheTransforms
+        MLIRCKKSOpenfheTransforms
+        MLIRRlweToOpenfheTransforms
         MLIRLWEToPolynomial
         MLIRHeirConvertSecretForToStaticFor
         MLIRHeirConvertSecretWhileToStaticFor
 
         MLIRRandom
         MLIRCGGIToJaxiteTransforms
-
+        MLIRCGGIToTfheRustTransforms
         MLIRCKKS
 )
 add_dependencies(${TARGET_NAME} MLIRPolynomialPassesIncGen)
