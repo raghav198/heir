@@ -596,6 +596,7 @@ struct CombToCGGI : public impl::CombToCGGIBase<CombToCGGI> {
         .add<SecretGenericOpLUTConversion,
              SecretGenericOpConversion<memref::AllocOp, memref::AllocOp>,
              SecretGenericOpConversion<memref::DeallocOp, memref::DeallocOp>,
+             SecretGenericOpConversion<memref::CollapseShapeOp, memref::CollapseShapeOp>,
              SecretGenericOpMemRefLoadConversion,
              SecretGenericOpAffineStoreConversion,
              SecretGenericOpAffineLoadConversion,

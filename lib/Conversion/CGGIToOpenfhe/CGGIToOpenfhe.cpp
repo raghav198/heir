@@ -79,6 +79,7 @@ struct AddCryptoContextParam : public OpConversionPattern<func::FuncOp> {
   }
 };
 
+namespace {
 FailureOr<Value> getContextualCryptoContext(Operation *op) {
   Value cryptoContext = op->getParentOfType<func::FuncOp>()
                             .getBody()
@@ -93,6 +94,7 @@ FailureOr<Value> getContextualCryptoContext(Operation *op) {
   }
   return cryptoContext;
 }
+} // namespace
 
 struct AddCryptoContextArg : public OpConversionPattern<func::CallOp> {
   AddCryptoContextArg(mlir::MLIRContext *context)
