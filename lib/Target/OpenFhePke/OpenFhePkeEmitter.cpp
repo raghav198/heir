@@ -85,7 +85,7 @@ LogicalResult OpenFhePkeEmitter::translate(Operation &op) {
                 MakePackedPlaintextOp>(
               [&](auto op) { return printOperation(op); })
           // Arith ops
-          .Case<arith::AddIOp, arith::SubIOp, arith::MulIOp, arith::CmpIOp, arith::FloorDivSIOp>(
+          .Case<arith::AddIOp, arith::SubIOp, arith::MulIOp, arith::CmpIOp, arith::FloorDivSIOp, arith::AndIOp, arith::ShRSIOp, arith::ShRUIOp, arith::TruncIOp>(
               [&](auto op) { return printOperation(op); })
           .Default([&](Operation &) {
             return op.emitOpError("unable to find printer for op");
@@ -431,6 +431,25 @@ LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::CmpIOp op) {
       break;
   }
   return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), cmp);
+}
+
+LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::AndIOp op) {
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "&");
+}
+
+LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::ShRSIOp op) {
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), ">>");
+}
+
+LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::ShRUIOp op) {
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), ">>");
+}
+
+LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::TruncIOp op) {
+  auto resultWidth = mlir::cast<IntegerType>(*op->getResultTypes().begin()).getWidth();
+  emitAutoAssignPrefix(op.getResult());
+  os << variableNames->getNameForValue(op.getIn()) << llvm::formatv(" & ((1 << {}) - 1)", resultWidth) << ";\n";
+  return success();
 }
 
 LogicalResult OpenFhePkeEmitter::printOperation(

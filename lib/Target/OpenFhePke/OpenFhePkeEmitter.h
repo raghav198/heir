@@ -52,6 +52,10 @@ class OpenFhePkeEmitter {
   LogicalResult printOperation(::mlir::arith::MulIOp op);
   LogicalResult printOperation(::mlir::arith::CmpIOp op);
   LogicalResult printOperation(::mlir::arith::FloorDivSIOp op);
+  LogicalResult printOperation(::mlir::arith::AndIOp op);
+  LogicalResult printOperation(::mlir::arith::ShRSIOp op);
+  LogicalResult printOperation(::mlir::arith::ShRUIOp op);
+  LogicalResult printOperation(::mlir::arith::TruncIOp op);
   LogicalResult printOperation(::mlir::func::FuncOp op);
   LogicalResult printOperation(::mlir::func::CallOp op);
   LogicalResult printOperation(::mlir::func::ReturnOp op);

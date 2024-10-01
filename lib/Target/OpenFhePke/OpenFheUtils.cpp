@@ -45,6 +45,7 @@ FailureOr<std::string> convertType(Type type) {
       .Case<IndexType>([&](auto ty) { return std::string("size_t"); })
       .Case<IntegerType>([&](auto ty) {
         auto width = ty.getWidth();
+        if (width != 1 && width < 8) width = 8;
         if (width != 1 && width != 8 && width != 16 && width != 32 && width != 64) {
           return FailureOr<std::string>();
         }

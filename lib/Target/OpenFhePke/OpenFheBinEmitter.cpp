@@ -4,6 +4,7 @@
 
 #include "lib/Analysis/SelectVariableNames/SelectVariableNames.h"
 #include "lib/Dialect/LWE/IR/LWEDialect.h"
+#include "lib/Dialect/LWE/IR/LWEOps.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheDialect.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheOps.h"
 #include "lib/Target/OpenFhePke/OpenFheUtils.h"
@@ -11,6 +12,7 @@
 #include "llvm/ADT/TypeSwitch.h"                       // from @llvm-project
 #include "llvm/include/llvm/Support/FormatVariadic.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/include/mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/include/mlir/Support/LLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Tools/mlir-translate/Translation.h"  // from @llvm-project
 
@@ -181,6 +183,16 @@ public:
             }
         }
     }
+
+    void flatten(std::vector<underlying_t>& dest) const {
+        for (int i = 0; i < size(); i++) {
+            if constexpr (dim<decltype(data)> == 1) {
+                dest.push_back(this->operator[](i));
+            } else {
+                this->operator[](i).flatten_into(dest);
+            }
+        }
+    }
     
 };
 
@@ -189,6 +201,34 @@ class vector_view<std::vector<T>&> : public vector_view<std::vector<T>> {
 public:
     vector_view(std::vector<T>& data) : vector_view<std::vector<T>>(data) {}
 };
+
+LWECiphertext trivialEncrypt(BinFHEContextT cc, LWEPlaintext ptxt) {
+  int n = cc->GetPublicKey()->GetLength();
+  NativeVector a(n);
+  NativeInteger b(ptxt);
+  return std::make_shared<LWECiphertextImpl>(a, b);
+}
+
+template <class T, int dim>
+std::vector<T> unflatten(std::vector<T> source, int start) {
+    std::vector<T> result;
+    for (int i = start; i < start + dim; i++)
+        result.push_back(source[i]);
+    return result;
+}
+
+template <class T, int firstDim, int... restDims>
+auto unflatten(std::vector<T> source, int start) -> std::vector<decltype(unflatten<T, restDims...>(std::declval<std::vector<T>>(), std::declval<int>()))> {
+    using return_type = typename of_rank<T, sizeof...(restDims) + 1>::type;
+    return_type unflattened;
+    
+    int stride = (1 * ... * restDims);
+    for (int i = 0; i < firstDim; i++) {
+        unflattened.push_back(unflatten<T, restDims...>(source, start));
+        start += stride;
+    }
+    return unflattened;
+}
 
 )cpp";
 // clang-format on
@@ -219,7 +259,7 @@ void registerToOpenFheBinTranslation() {
       [](DialectRegistry &registry) {
         registry.insert<arith::ArithDialect, func::FuncDialect, lwe::LWEDialect,
                         openfhe::OpenfheDialect, memref::MemRefDialect,
-                        scf::SCFDialect>();
+                        scf::SCFDialect, affine::AffineDialect>();
       });
 }
 
@@ -227,6 +267,7 @@ LogicalResult translateToOpenFheBin(mlir::Operation *op,
                                     llvm::raw_ostream &os) {
   SelectVariableNames variableNames(op);
   OpenFheBinEmitter emitter(os, &variableNames);
+
   return emitter.translate(*op);
 }
 
@@ -239,9 +280,12 @@ LogicalResult OpenFheBinEmitter::translate(Operation &operation) {
           .Case<memref::StoreOp>(
               [&](auto store) { return printOperation(store); })
           .Case<memref::SubViewOp>(
-            [&](auto subview) { return printOperation(subview); })
-          .Case<memref::CopyOp>(
-            [&](auto copy) { return printOperation(copy); })
+              [&](auto subview) { return printOperation(subview); })
+          .Case<memref::ReinterpretCastOp>(
+              [&](auto castOp) { return printOperation(castOp); })
+          .Case<memref::CopyOp>([&](auto copy) { return printOperation(copy); })
+          .Case<memref::CollapseShapeOp>(
+              [&](auto collapse) { return printOperation(collapse); })
           .Case<memref::AllocOp>(
               [&](auto alloc) { return printOperation(alloc); })
           .Case<openfhe::GetLWESchemeOp>(
@@ -254,7 +298,11 @@ LogicalResult OpenFheBinEmitter::translate(Operation &operation) {
               [&](auto makeLut) { return printOperation(makeLut); })
           .Case<openfhe::EvalFuncOp>(
               [&](auto evalFunc) { return printOperation(evalFunc); })
+          .Case<lwe::EncodeOp, lwe::TrivialEncryptOp>(
+              [&](auto op) { return printOperation(op); })
           .Case<scf::IfOp>([&](auto ifOp) { return printOperation(ifOp); })
+          .Case<affine::AffineForOp>(
+              [&](auto forOp) { return printOperation(forOp); })
           .Default([&](auto &op) {
             return OpenFhePkeEmitter::translate(operation);
           });
@@ -297,12 +345,38 @@ LogicalResult OpenFheBinEmitter::printOperation(memref::AllocOp alloc) {
   return success();
 }
 
-SmallVector<std::string> OpenFheBinEmitter::getStaticDynamicArgs(SmallVector<mlir::Value> dynamicArgs, ArrayRef<long long> staticArgs) {
+LogicalResult OpenFheBinEmitter::printOperation(lwe::EncodeOp encode) {
+  return success();
+}
+
+LogicalResult OpenFheBinEmitter::printOperation(
+    lwe::TrivialEncryptOp trivialEncrypt) {
+  Value cryptoContext = trivialEncrypt->getParentOfType<func::FuncOp>()
+                            .getBody()
+                            .getBlocks()
+                            .front()
+                            .getArguments()
+                            .front();
+
+  if (auto encoder =
+          dyn_cast<lwe::EncodeOp>(trivialEncrypt.getInput().getDefiningOp())) {
+    auto ptxtName = variableNames->getNameForValue(encoder.getPlaintext());
+    emitAutoAssignPrefix(trivialEncrypt.getResult());
+    os << "trivialEncrypt(" << variableNames->getNameForValue(cryptoContext)
+       << ", " << ptxtName << ");\n";
+    return success();
+  }
+  return failure();
+}
+
+SmallVector<std::string> OpenFheBinEmitter::getStaticDynamicArgs(
+    SmallVector<mlir::Value> dynamicArgs, ArrayRef<long long> staticArgs) {
   SmallVector<std::string> args;
   int dynamicIndex = 0;
   for (long long staticArg : staticArgs) {
     if (staticArg == ShapedType::kDynamic) {
-      args.push_back(variableNames->getNameForValue(dynamicArgs[dynamicIndex++]));
+      args.push_back(
+          variableNames->getNameForValue(dynamicArgs[dynamicIndex++]));
     } else {
       args.push_back(std::to_string(staticArg));
     }
@@ -310,10 +384,19 @@ SmallVector<std::string> OpenFheBinEmitter::getStaticDynamicArgs(SmallVector<mli
   return args;
 }
 
-LogicalResult OpenFheBinEmitter::printOperation(memref::SubViewOp subview) {
-  SmallVector<std::string> offsets = getStaticDynamicArgs(subview.getOffsets(), subview.getStaticOffsets());
-  SmallVector<std::string> strides = getStaticDynamicArgs(subview.getStrides(), subview.getStaticStrides());
-  SmallVector<std::string> sizes = getStaticDynamicArgs(subview.getSizes(), subview.getStaticSizes());
+template <
+    class T,
+    typename = std::enable_if_t<
+        std::disjunction<std::is_same<T, memref::SubViewOp>,
+                         std::is_same<T, memref::ReinterpretCastOp>>::value,
+        bool>>
+std::string OpenFheBinEmitter::getSubviewArgs(T op) {
+  SmallVector<std::string> offsets =
+      getStaticDynamicArgs(op.getOffsets(), op.getStaticOffsets());
+  SmallVector<std::string> strides =
+      getStaticDynamicArgs(op.getStrides(), op.getStaticStrides());
+  SmallVector<std::string> sizes =
+      getStaticDynamicArgs(op.getSizes(), op.getStaticSizes());
 
   SmallVector<std::string> viewStrings;
   for (int i = 0; i < offsets.size(); i++) {
@@ -327,16 +410,63 @@ LogicalResult OpenFheBinEmitter::printOperation(memref::SubViewOp subview) {
       std::next(viewStrings.begin()), viewStrings.end(), viewStrings[0],
       [&](const std::string &a, const std::string &b) { return a + ", " + b; });
 
+  return args;
+}
+
+LogicalResult OpenFheBinEmitter::printOperation(memref::SubViewOp subview) {
+  std::string args = getSubviewArgs(subview);
   emitAutoAssignPrefix(subview.getResult());
   std::string sourceName = variableNames->getNameForValue(subview.getSource());
-  os << "vector_view<decltype(" << sourceName << ")>(" << sourceName << ").subview({" << args << "});\n";
+  os << "vector_view<decltype(" << sourceName << ")>(" << sourceName
+     << ").subview({" << args << "});\n";
   return success();
-  
 }
 
 LogicalResult OpenFheBinEmitter::printOperation(memref::CopyOp copy) {
   os << variableNames->getNameForValue(copy.getSource()) << ".flatten_into(";
   os << variableNames->getNameForValue(copy.getTarget()) << ");\n";
+  return success();
+}
+
+LogicalResult OpenFheBinEmitter::printOperation(
+    memref::ReinterpretCastOp castOp) {
+  std::string sourceName = variableNames->getNameForValue(castOp.getSource());
+  if (castOp.getSource().getType().getRank() >
+      mlir::cast<BaseMemRefType>(castOp->getResult(0).getType()).getRank()) {
+    std::string args = getSubviewArgs(castOp);
+    os << convertType(castOp->getResult(0).getType()) << " "
+       << variableNames->getNameForValue(castOp->getResult(0)) << ";\n";
+
+    os << llvm::formatv(
+        "vector_view<decltype({})>({}).subview({{{}}}).flatten({});\n",
+        sourceName, sourceName, args,
+        variableNames->getNameForValue(castOp->getResult(0)));
+  } else {
+    emitAutoAssignPrefix(castOp->getResult(0));
+    auto destinationShape =
+        mlir::cast<BaseMemRefType>(castOp->getResult(0).getType()).getShape();
+    os << "unflatten<"
+       << convertType(castOp.getSource().getType().getElementType())
+       << std::accumulate(std::next(destinationShape.begin()),
+                          destinationShape.end(),
+                          std::to_string(destinationShape[0]),
+                          [](auto dim1, auto dim2) {
+                            return dim1 + ", " + std::to_string(dim2);
+                          })
+       << ">(" << sourceName << ");\n";
+  }
+  return success();
+}
+
+LogicalResult OpenFheBinEmitter::printOperation(
+    memref::CollapseShapeOp collapseOp) {
+  os << convertType(collapseOp->getResult(0).getType()) << " "
+     << variableNames->getNameForValue(collapseOp->getResult(0)) << ";\n";
+  std::string sourceName =
+      variableNames->getNameForValue(collapseOp.getViewSource());
+  os << llvm::formatv("vector_view<decltype({})>({}).flatten({});\n",
+                      sourceName, sourceName,
+                      variableNames->getNameForValue(collapseOp->getResult(0)));
   return success();
 }
 
@@ -421,6 +551,28 @@ LogicalResult OpenFheBinEmitter::printOperation(scf::IfOp ifOp) {
   os.unindent();
   os << "}\n";
 
+  return success();
+}
+
+LogicalResult OpenFheBinEmitter::printOperation(affine::AffineForOp forOp) {
+  auto inductionVar = variableNames->getNameForValue(forOp.getInductionVar());
+  if (forOp.getNumRegionIterArgs() != 0) {
+    forOp.emitError(
+        "Loops with loop-carried dependence currently unsupported!");
+    return failure();
+  }
+  os << "for (";
+  emitAutoAssignPrefix(forOp.getInductionVar());
+  os << forOp.getConstantLowerBound() << "; ";
+  os << inductionVar << " < " << forOp.getConstantUpperBound() << "; ";
+  os << inductionVar << " += " << forOp.getStepAsInt() << ") {\n";
+  os.indent();
+  for (auto &op : forOp.getBody()->getOperations()) {
+    if (mlir::isa<affine::AffineYieldOp>(op)) continue;
+    if (failed(translate(op))) {
+      return failure();
+    }
+  }
   return success();
 }
 

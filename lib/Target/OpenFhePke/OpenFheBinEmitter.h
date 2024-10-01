@@ -7,6 +7,7 @@
 #include "lib/Target/OpenFhePke/OpenFhePkeEmitter.h"
 #include "llvm/include/llvm/Support/raw_ostream.h"       // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"    // from @llvm-project
+#include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/SCF/IR/SCF.h"        // from @llvm-project
@@ -43,8 +44,15 @@ class OpenFheBinEmitter : public OpenFhePkeEmitter {
   LogicalResult printOperation(openfhe::MakeLutOp makeLut);
   LogicalResult printOperation(openfhe::EvalFuncOp evalFunc);
 
-  // some of the SCF ops
+  LogicalResult printOperation(lwe::EncodeOp encode);
+  LogicalResult printOperation(lwe::TrivialEncryptOp trivialEncrypt);
+
+  // some of the control flow ops
   LogicalResult printOperation(scf::IfOp ifOp);
+  LogicalResult printOperation(affine::AffineForOp forOp);
+
+  LogicalResult printOperation(memref::ReinterpretCastOp castOp);
+  LogicalResult printOperation(memref::CollapseShapeOp collapseOp);
 
   LogicalResult printInPlaceEvalMethod(mlir::Value result,
                                        mlir::Value cryptoContext,
@@ -52,6 +60,9 @@ class OpenFheBinEmitter : public OpenFhePkeEmitter {
                                        std::string_view op);
 
     SmallVector<std::string> getStaticDynamicArgs(SmallVector<mlir::Value> dynamicArgs, ArrayRef<long long> staticArgs);
+    
+    template <class T, class _>
+    std::string getSubviewArgs(T op);
 };
 
 }  // namespace mlir::heir::openfhe

@@ -57,7 +57,6 @@ mlir::Operation *nextLutToMerge(mlir::Operation *root,
   mlir::Operation *next = nullptr;
   int outDegree = lutGraph.getVertices()
                       .size();  // larger than the maximum possible out degree
-
   for (auto *vertex : lutGraph.getVertices()) {
     if (alreadyMerged.find(vertex) != alreadyMerged.end()) continue;
 
