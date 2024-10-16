@@ -63,6 +63,8 @@ class OpenFheBinEmitter : public OpenFhePkeEmitter {
     
     template <class T, class _>
     std::string getSubviewArgs(T op);
+
+    mlir::FailureOr<std::string> getAllocConstructor(MemRefType type);
 };
 
 }  // namespace mlir::heir::openfhe

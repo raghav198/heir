@@ -159,6 +159,7 @@ cc_binary(
         "@heir//lib/Target/OpenFhePke:OpenFhePkeEmitter",
         "@heir//lib/Target/OpenFhePke:OpenFheBinEmitter",
         "@heir//lib/Target/OpenFhePke:OpenFhePkeHeaderEmitter",
+        "@heir//lib/Target/OpenFhePke:OpenFheBinHeaderEmitter",
         "@heir//lib/Target/TfheRust:TfheRustEmitter",
         "@heir//lib/Target/TfheRustBool:TfheRustBoolEmitter",
         "@heir//lib/Target/Verilog:VerilogEmitter",

@@ -972,7 +972,7 @@ LogicalResult VerilogEmitter::emitIndexType(Value indexValue, raw_ostream &os) {
   auto widthBigint = APInt(64, biggestMemrefSize);
   int32_t width = widthBigint.isPowerOf2() ? widthBigint.logBase2()
                                            : widthBigint.logBase2() + 1;
-  os << wireDeclaration(IntegerType::get(indexValue.getContext(), width),
+  os << wireDeclaration(IntegerType::get(indexValue.getContext(), width, IntegerType::Unsigned),
                         width);
   return success();
 }

@@ -34,9 +34,9 @@ using LWESchemeT = std::shared_ptr<LWEEncryptionScheme>;
 constexpr int ptxt_mod = 8;
 
 std::vector<LWECiphertext> encrypt(BinFHEContextT cc, LWEPrivateKey sk,
-                                    int value) {
+                                    int value, int width) {
   std::vector<lbcrypto::LWECiphertext> encrypted_bits;
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < width; i++) {
     int bit = (value & (1 << i)) >> i;
     encrypted_bits.push_back(
         cc->Encrypt(sk, bit, BINFHE_OUTPUT::SMALL_DIM, ptxt_mod));
@@ -87,6 +87,16 @@ constexpr int dim<std::vector<T>> = 1 + dim<T>;
 template<class T>
 constexpr int dim<std::vector<T>&> = 1 + dim<T>;
 
+template<class T, int rank>
+struct of_rank {
+    using type = std::vector<typename of_rank<T, rank - 1>::type>;
+};
+
+template<class T>
+struct of_rank<T, 0> {
+    using type = T;
+};
+
 template <class T>
 struct underlying {
     using type = T;
@@ -113,7 +123,7 @@ public:
             views.emplace_back(0, 1, -1);
         }
     }
-    vector_view(std::initializer_list<T> elems) : data(owned_data), owned_data(elems) {
+    vector_view(const std::vector<T>& elems) : data(owned_data), owned_data(elems) {
         for (int i = 0; i < dim<decltype(data)>; i++) {
             views.emplace_back(0, 1, -1);
         }
@@ -130,7 +140,7 @@ public:
         return views[0].size;
     }
 
-    auto operator[](size_t index) {
+    auto operator[](size_t index) -> decltype(auto) {
         auto& vec = data[views[0].offset + index * views[0].stride];
         if constexpr (dim<decltype(data)> == 1) {
             return vec;
@@ -140,7 +150,7 @@ public:
         }
     }
 
-    auto operator[](size_t index) const {
+    auto operator[](size_t index) const -> decltype(auto) {
         auto& vec = data[views[0].offset + index * views[0].stride];
         if constexpr (dim<decltype(data)> == 1) {
             return vec;
@@ -170,7 +180,7 @@ public:
         return copied;
     }
 
-    void flatten_into(std::vector<underlying_t>& dest, int *index = nullptr) const {
+    void flatten_into(const std::vector<underlying_t>& dest, int *index = nullptr) const {
         int local_index = 0;
         if (index == nullptr) {
             index = &local_index;
@@ -189,7 +199,22 @@ public:
             if constexpr (dim<decltype(data)> == 1) {
                 dest.push_back(this->operator[](i));
             } else {
-                this->operator[](i).flatten_into(dest);
+                this->operator[](i).flatten(dest);
+            }
+        }
+    }
+
+    void unflatten_from(std::vector<underlying_t>& dest, int *index = nullptr) {
+        int local_index = 0;
+        if (index == nullptr) {
+            index = &local_index;
+        }
+
+        for (int i = 0; i < size(); i++) {
+            if constexpr (dim<decltype(data)> == 1) {
+                this->operator[](i) = dest[(*index)++];
+            } else {
+                this->operator[](i).unflatten_from(dest, index);
             }
         }
     }
@@ -203,14 +228,15 @@ public:
 };
 
 LWECiphertext trivialEncrypt(BinFHEContextT cc, LWEPlaintext ptxt) {
-  int n = cc->GetPublicKey()->GetLength();
-  NativeVector a(n);
-  NativeInteger b(ptxt);
+  auto params = cc->GetParams()->GetLWEParams();
+  
+  NativeVector a(params->Getn(), params->Getq(), 0);
+  NativeInteger b(ptxt * (params->Getq() / ptxt_mod));
   return std::make_shared<LWECiphertextImpl>(a, b);
 }
 
 template <class T, int dim>
-std::vector<T> unflatten(std::vector<T> source, int start) {
+std::vector<T> unflatten(std::vector<T> source, int start = 0) {
     std::vector<T> result;
     for (int i = start; i < start + dim; i++)
         result.push_back(source[i]);
@@ -218,7 +244,7 @@ std::vector<T> unflatten(std::vector<T> source, int start) {
 }
 
 template <class T, int firstDim, int... restDims>
-auto unflatten(std::vector<T> source, int start) -> std::vector<decltype(unflatten<T, restDims...>(std::declval<std::vector<T>>(), std::declval<int>()))> {
+auto unflatten(std::vector<T> source, int start = 0) -> std::vector<decltype(unflatten<T, restDims...>(std::declval<std::vector<T>>(), std::declval<int>()))> {
     using return_type = typename of_rank<T, sizeof...(restDims) + 1>::type;
     return_type unflattened;
     
@@ -228,6 +254,104 @@ auto unflatten(std::vector<T> source, int start) -> std::vector<decltype(unflatt
         start += stride;
     }
     return unflattened;
+}
+
+template <class underlying, int rank>
+class iterator {
+    vector_view<typename of_rank<underlying, rank>::type> *view;
+    int index;
+    bool done = false;
+    iterator<underlying, rank - 1> inner_iter;
+
+public:
+    iterator(const vector_view<typename of_rank<underlying, rank>::type>& view, int index) : 
+        view(new vector_view(view)), index(index), inner_iter(view[0], 0) {}
+    underlying& operator*() {
+        return *inner_iter;
+    }
+
+    iterator(const iterator<underlying, rank>& other) :
+        view(new vector_view(other.view)), inner_iter(other.inner_iter), index(index) {}
+
+    iterator<underlying, rank>& operator=(const iterator<underlying, rank>& other) {
+        auto copy = other;
+        std::swap(view, copy.view);
+        std::swap(index, copy.index);
+        std::swap(inner_iter, copy.inner_iter);
+        return *this;
+    }
+
+    iterator<underlying, rank>& operator++() {
+        // std::cout << "Incrementing iterator of rank " << rank << "\n";
+        ++inner_iter;
+        if (inner_iter.at_end()) {
+            if (++index == view->size()) {
+                done = true;
+            } else {
+                inner_iter = iterator<underlying, rank - 1>(view->operator[](index), 0);
+            }
+            
+        }
+        return *this;
+    }
+
+    bool at_end() {
+        return done;
+    }
+};
+
+template <class underlying>
+class iterator<underlying, 1> {
+    vector_view<std::vector<underlying>> *view;
+    int index;
+
+public:
+    iterator(const vector_view<std::vector<underlying>>& view, int index) : view(new vector_view(view)), index(index) {}
+    iterator(const iterator<underlying, 1>& other) :
+        view(new vector_view(*other.view)), index(other.index) {}
+
+    iterator<underlying, 1>& operator=(const iterator<underlying, 1>& other) {
+        auto copy = other;
+        std::swap(view, copy.view);
+        std::swap(index, copy.index);
+        return *this;
+    }
+
+    underlying& operator*() {
+        return view->operator[](index);
+    }
+    iterator<underlying, 1>& operator++() {
+        // std::cout << "Advancing through a vector\n";
+        index++;
+        return *this;
+    }
+    bool at_end() {
+        return index == view->size();
+    }
+};
+
+template<class T>
+auto begin(const vector_view<T>& view) {
+    using U = typename underlying<T>::type;
+    constexpr int rank = dim<T>;
+    return iterator<U, rank>(view, 0);
+}
+
+template<class T>
+auto end(const vector_view<T>& view) {
+    using U = typename underlying<T>::type;
+    constexpr int rank = dim<T>;
+    return iterator<U, rank>(view, view.size());
+}
+
+template <class S, class T>
+void copy(const vector_view<S>& dest, const vector_view<T>& source) {
+    auto i = begin(dest);
+    auto j = begin(source);
+
+    for (; !(i.at_end() || j.at_end()); ++i, ++j) {
+        *i = *j;
+    }
 }
 
 )cpp";
@@ -336,13 +460,59 @@ LogicalResult OpenFheBinEmitter::printOperation(memref::StoreOp store) {
   return success();
 }
 
+mlir::FailureOr<std::string> OpenFheBinEmitter::getAllocConstructor(MemRefType type) {
+  std::string output;
+  llvm::raw_string_ostream ss(output);
+
+  auto typeResult = convertType(type);
+  if (failed(typeResult)) {
+    return failure();
+  }
+
+  ss << typeResult.value() << "(" << type.getShape()[0];
+  if (type.getRank() > 1) {
+    auto sliced = MemRefType::get({type.getShape().begin() + 1, type.getShape().end()}, type.getElementType());
+    auto rest = getAllocConstructor(sliced);
+    if (failed(rest)) {
+      return failure();
+    }
+    ss << ", " << rest.value();
+  }
+  ss << ")";
+
+  return output;
+}
+
 LogicalResult OpenFheBinEmitter::printOperation(memref::AllocOp alloc) {
-  auto typeResult = convertType(*alloc->getResultTypes().begin());
-  if (failed(typeResult)) return failure();
-  os << typeResult.value() << " ";
-  os << variableNames->getNameForValue(alloc.getResult()) << "(";
-  os << alloc.getResult().getType().getShape()[0] << ");\n";
+
+  auto memrefType = alloc.getResult().getType();
+  if (failed(emitTypedAssignPrefix(alloc.getResult()))) {
+    return failure();
+  }
+
+  auto allocResult = getAllocConstructor(memrefType);
+  if (failed(allocResult)) {
+    return failure();
+  }
+
+  os << allocResult << ";\n";
   return success();
+
+  // const auto *shapeBegin = memrefType.getShape().begin();
+  // for (int dim = 0; dim < memrefType.getRank(); dim++) {
+  //   auto rankType = MemRefType::get({shapeBegin, memrefType.getShape().end()}, memrefType.getElementType());
+  //   auto typeResult = convertType(rankType);
+  //   if (failed(typeResult)) return failure();
+  //   os << typeResult.value() << "(" << *shapeBegin;
+  // }
+
+
+  // auto typeResult = convertType(*alloc->getResultTypes().begin());
+  // if (failed(typeResult)) return failure();
+  // os << typeResult.value() << " ";
+  // os << variableNames->getNameForValue(alloc.getResult()) << "(";
+  // os << alloc.getResult().getType().getShape()[0] << ");\n";
+  // return success();
 }
 
 LogicalResult OpenFheBinEmitter::printOperation(lwe::EncodeOp encode) {
@@ -423,8 +593,39 @@ LogicalResult OpenFheBinEmitter::printOperation(memref::SubViewOp subview) {
 }
 
 LogicalResult OpenFheBinEmitter::printOperation(memref::CopyOp copy) {
-  os << variableNames->getNameForValue(copy.getSource()) << ".flatten_into(";
-  os << variableNames->getNameForValue(copy.getTarget()) << ");\n";
+  std::string source, dest;
+  if (copy.getTarget().getDefiningOp<memref::SubViewOp>()) {
+    dest = variableNames->getNameForValue(copy.getTarget());
+  } else {
+    dest = llvm::formatv("vector_view<{}>({})",
+                         convertType(copy.getTarget().getType()),
+                         variableNames->getNameForValue(copy.getTarget()));
+  }
+
+  if (copy.getSource().getDefiningOp<memref::SubViewOp>()) {
+    source = variableNames->getNameForValue(copy.getSource());
+  } else {
+    source = llvm::formatv("vector_view<{}>({})",
+                           convertType(copy.getSource().getType()),
+                           variableNames->getNameForValue(copy.getSource()));
+  }
+
+  os << llvm::formatv("copy({}, {});\n", dest, source);
+  // variableNames->getNameForValue(copy.getTarget())
+
+  // if (copy.getSource().getType().getRank() >=
+  //     copy.getTarget().getType().getRank()) {
+  //   os << variableNames->getNameForValue(copy.getSource()) <<
+  //   ".flatten_into("; os << variableNames->getNameForValue(copy.getTarget())
+  //   << ");\n";
+  // } else {
+  //   llvm::dbgs() << "Unflattening from " << copy.getSource().getType() << "
+  //   to " << copy.getTarget().getType() << "\n"; os <<
+  //   variableNames->getNameForValue(copy.getTarget())
+  //      << ".unflatten_from(";
+  //   os << variableNames->getNameForValue(copy.getSource()) << ");\n";
+  // }
+
   return success();
 }
 
@@ -438,7 +639,7 @@ LogicalResult OpenFheBinEmitter::printOperation(
        << variableNames->getNameForValue(castOp->getResult(0)) << ";\n";
 
     os << llvm::formatv(
-        "vector_view<decltype({})>({}).subview({{{}}}).flatten({});\n",
+        "vector_view<decltype({})>({})/*.subview({{{}})*/.flatten({});\n",
         sourceName, sourceName, args,
         variableNames->getNameForValue(castOp->getResult(0)));
   } else {
@@ -446,7 +647,7 @@ LogicalResult OpenFheBinEmitter::printOperation(
     auto destinationShape =
         mlir::cast<BaseMemRefType>(castOp->getResult(0).getType()).getShape();
     os << "unflatten<"
-       << convertType(castOp.getSource().getType().getElementType())
+       << convertType(castOp.getSource().getType().getElementType()) << ", "
        << std::accumulate(std::next(destinationShape.begin()),
                           destinationShape.end(),
                           std::to_string(destinationShape[0]),
@@ -562,7 +763,9 @@ LogicalResult OpenFheBinEmitter::printOperation(affine::AffineForOp forOp) {
     return failure();
   }
   os << "for (";
-  emitAutoAssignPrefix(forOp.getInductionVar());
+  if (failed(emitTypedAssignPrefix(forOp.getInductionVar()))) {
+    return failure();
+  };
   os << forOp.getConstantLowerBound() << "; ";
   os << inductionVar << " < " << forOp.getConstantUpperBound() << "; ";
   os << inductionVar << " += " << forOp.getStepAsInt() << ") {\n";
@@ -573,6 +776,8 @@ LogicalResult OpenFheBinEmitter::printOperation(affine::AffineForOp forOp) {
       return failure();
     }
   }
+  os.unindent();
+  os << "}\n";
   return success();
 }
 
