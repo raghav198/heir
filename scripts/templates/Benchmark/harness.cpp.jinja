@@ -1,0 +1,27 @@
+#include "{{ benchmark_name }}.hpp"
+
+#include <iostream>
+#include <memory>
+#include <openfhe.h>
+#include <chrono>
+
+using namespace lbcrypto;
+using BinFHEContextT = std::shared_ptr<BinFHEContext>;
+
+int main(int argc, char **argv) {
+    auto cc = std::make_shared<BinFHEContext>(BinFHEContext());
+    cc->GenerateBinFHEContext(BINFHE_PARAMSET::TOY, true, 12);
+    auto sk = cc->KeyGen();
+    cc->BTKeyGen(sk);
+
+    auto in = encrypt(cc, sk, 0);
+    auto start = std::chrono::high_resolution_clock::now();
+    auto out = {{ benchmark_name }}(cc, in);
+    auto end = std::chrono::high_resolution_clock::now();
+    int outPtxt = decrypt(cc, sk, out);
+    std::cout << "Result: " << outPtxt << "\n";
+    std::cout << "{{ benchmark_name }} took " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms\n";
+    
+    return 0;
+}

@@ -11,11 +11,14 @@ import jinja2
 def render_all(path: pathlib.Path, **args):
     env = jinja2.Environment(loader=jinja2.FileSystemLoader(path))
     for template_filename in os.listdir(path):
-        template = env.get_template(template_filename)
-        content = template.render(**args)
-        with open(path / template_filename, mode="w") as outfile:
-            outfile.write(content)
-            print(f"Rendered template for {path / template_filename}")
+        try:
+            template = env.get_template(template_filename)
+            content = template.render(**args)
+            with open(path / template_filename, mode="w") as outfile:
+                outfile.write(content)
+                print(f"Rendered template for {path / template_filename}")
+        except jinja2.TemplateNotFound:
+            continue
 
 
 def try_create_dirs(lib_path, force=False):

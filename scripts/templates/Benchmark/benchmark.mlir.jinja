@@ -1,0 +1,5 @@
+module {
+    func.func @{{ benchmark_name }}(%arg: !secret.secret<i8>) -> !secret.secret<i8> {
+        return %arg : !secret.secret<i8>
+    }
+}
