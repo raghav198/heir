@@ -4,7 +4,6 @@
 #include <set>
 
 #include "lib/Dialect/Comb/IR/CombOps.h"
-#include "llvm/include/llvm/Support/Debug.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 
@@ -19,17 +18,18 @@ struct ShrinkLutConstants
   void runOnOperation() override {
     auto root = getOperation();
     mlir::OpBuilder builder(&getContext());
-
     mlir::DenseMap<comb::TruthTableOp, std::set<int>> lutConstantIndices;
 
     root->walk([&lutConstantIndices](comb::TruthTableOp lut) -> void {
       std::set<int> constantIndices;
       for (auto [i, input] : llvm::enumerate(lut.getLookupTableInputs())) {
-        if (mlir::isa<arith::ConstantOp>(input.getDefiningOp()))
+        if (mlir::isa_and_nonnull<arith::ConstantOp>(input.getDefiningOp()))
           constantIndices.insert(i);
       }
-      if (!constantIndices.empty())
+      if (!constantIndices.empty()) {
         lutConstantIndices.insert({lut, constantIndices});
+      }
+        
     });
 
     for (auto &[lut, indices] : lutConstantIndices) {
@@ -78,7 +78,6 @@ struct ShrinkLutConstants
           builder.getIntegerAttr(
               builder.getIntegerType(1 << reducedSize, false),
               reducedLookupTable));
-
       lut->replaceAllUsesWith(reducedLutOp);
       lut->erase();
     }
