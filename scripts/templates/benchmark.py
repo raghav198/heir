@@ -2,7 +2,7 @@ import shutil
 import subprocess
 import time
 from templates import render_all, try_create_dirs, copy_all
-import fire
+import fire # type: ignore
 import pathlib
 import os
 
@@ -35,6 +35,26 @@ class CLI:
         if not os.path.isdir(git_root / ".git"):
             raise RuntimeError(f"Could not find git root, looked at {git_root}")
         self.root = git_root
+
+    def verify(self, root_dir: str, benchmark_name: str):
+        """Syntactically verify a benchmark without running any passes
+        
+        Args:
+            root_dir: The `project` directory that holds the benchmark
+            benchmark_name: The name of the benchmark to verify
+        """
+        
+        benchmark_root = pathlib.Path(root_dir) / benchmark_name
+        benchmark_ir = benchmark_root / f"{benchmark_name}.mlir"
+        
+        if not benchmark_ir.exists():
+            raise ValueError(f"Could not find benchmark at {benchmark_ir}")
+        
+        try:
+            try_run(f"Verifying {benchmark_name}", get_bazel_args("heir-opt", [], benchmark_root))
+            print(f"Successfully verified {benchmark_name}")
+        except Exception as e:
+            print(e)
 
     def new_benchmark(self, root_dir: str, benchmark_name: str, force: bool = False):
         """Initialize a new empty benchmark
