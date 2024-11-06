@@ -1,7 +1,6 @@
 #include "lib/Transforms/MergeLUTs/LutMergingUtils.h"
 
 #include <algorithm>
-#include <ostream>
 #include <vector>
 
 #include "lib/Dialect/Comb/IR/CombOps.h"
@@ -36,7 +35,7 @@ graph::Graph<mlir::Operation*> makeLUTGraph(mlir::Operation* root) {
 }
 
 template <class T>
-llvm::raw_ostream& operator<<(llvm::raw_ostream& os,
+static llvm::raw_ostream& operator<<(llvm::raw_ostream& os,
                               const std::vector<T>& vec) {
   os << "[";
   for (auto t : vec) os << t;
@@ -45,7 +44,7 @@ llvm::raw_ostream& operator<<(llvm::raw_ostream& os,
   return os;
 }
 
-std::vector<bool> intToBits(int value, int width, bool flip = false) {
+static std::vector<bool> intToBits(int value, int width, bool flip = false) {
   std::vector<bool> bits;
   bits.reserve(width);
   for (int i = 0; i < width; i++)
@@ -63,7 +62,7 @@ std::vector<bool> intToBits(int value, int width, bool flip = false) {
 //   return value;
 // }
 
-int bitsToInt(const std::vector<bool>& bits) {
+static int bitsToInt(const std::vector<bool>& bits) {
   int value = 0;
   int power = 0;
 
@@ -75,7 +74,7 @@ int bitsToInt(const std::vector<bool>& bits) {
 }
 
 template <class B>
-mlir::APInt bitvecToAPInt(const B& bitvec) {
+static mlir::APInt bitvecToAPInt(const B& bitvec) {
   std::string bitstring;
   int size = 0;
   for (auto b : bitvec) {
@@ -85,7 +84,7 @@ mlir::APInt bitvecToAPInt(const B& bitvec) {
   return mlir::APInt(size, bitstring, 2);
 }
 
-mlir::APInt composeLookupTables(const llvm::SmallVector<int>& sourceIdxs,
+static mlir::APInt composeLookupTables(const llvm::SmallVector<int>& sourceIdxs,
                                 const mlir::APInt& sourceLut,
                                 const llvm::SmallVector<int>& destIdxs,
                                 const mlir::APInt& destLut) {
@@ -118,7 +117,7 @@ mlir::APInt composeLookupTables(const llvm::SmallVector<int>& sourceIdxs,
     }
     int sourceInput = bitsToInt(sourceInputs);
     bool sourceOutput = (sourceLut.ashr(sourceInput) & 1).getBoolValue();
-        // bool sourceOutput = sourceLutTable[bitsToInt(sourceInputs)];
+    // bool sourceOutput = sourceLutTable[bitsToInt(sourceInputs)];
 
     std::vector<bool> destInputs;
     for (auto idx : destIdxs) {
@@ -134,11 +133,10 @@ mlir::APInt composeLookupTables(const llvm::SmallVector<int>& sourceIdxs,
 
     // LLVM_DEBUG({
     //   llvm::dbgs() << "For input: " << possibleInput << "\n";
-    //   llvm::dbgs() << "\tsourceInput = " << sourceInput << ", sourceOutput = " << sourceOutput << "\n";
-    //   llvm::dbgs() << "\tdestInput = " << destInput << ", destOutput = " << destOutput << "\n";
+    //   llvm::dbgs() << "\tsourceInput = " << sourceInput << ", sourceOutput =
+    //   " << sourceOutput << "\n"; llvm::dbgs() << "\tdestInput = " <<
+    //   destInput << ", destOutput = " << destOutput << "\n";
     // });
-  
-
   }
   LLVM_DEBUG({
     llvm::dbgs() << "Composed bits are: ";
@@ -170,9 +168,9 @@ mlir::APInt getMergedLookupTable(comb::TruthTableOp user,
       destIdxs.push_back(-1);
   }
 
-  mlir::APInt mergedLookupTable = composeLookupTables(
-      sourceIdxs, lutToMerge.getLookupTable().getValue(),
-      destIdxs, user.getLookupTable().getValue());
+  mlir::APInt mergedLookupTable =
+      composeLookupTables(sourceIdxs, lutToMerge.getLookupTable().getValue(),
+                          destIdxs, user.getLookupTable().getValue());
 
   return mergedLookupTable;
 }
@@ -199,9 +197,9 @@ mlir::FailureOr<LutMergeResult> mergeLutsIfPossible(
   auto synthesisResult = synthesizer.synthesize(lookupTable);
   if (mlir::failed(synthesisResult)) return mlir::failure();
 
-  return LutMergeResult{.arithmeticLookupTable = *synthesisResult,
+  return LutMergeResult{.userInputs = userInputs.takeVector(),
                         .lookupTable = lookupTable,
-                        .userInputs = userInputs.takeVector()};
+                        .arithmeticLookupTable = *synthesisResult};
 }
 
 }  // namespace heir
