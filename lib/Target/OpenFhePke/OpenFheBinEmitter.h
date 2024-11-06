@@ -59,12 +59,15 @@ class OpenFheBinEmitter : public OpenFhePkeEmitter {
                                        mlir::ValueRange operands,
                                        std::string_view op);
 
-    SmallVector<std::string> getStaticDynamicArgs(SmallVector<mlir::Value> dynamicArgs, ArrayRef<long long> staticArgs);
-    
-    template <class T, class _>
-    std::string getSubviewArgs(T op);
+  SmallVector<std::string> getStaticDynamicArgs(
+      SmallVector<mlir::Value> dynamicArgs, ArrayRef<int64_t> staticArgs);
 
-    mlir::FailureOr<std::string> getAllocConstructor(MemRefType type);
+  template <class T, typename = std::enable_if_t<std::disjunction<
+                         std::is_same<T, memref::SubViewOp>,
+                         std::is_same<T, memref::ReinterpretCastOp>>::value>>
+  std::string getSubviewArgs(T op);
+
+  mlir::FailureOr<std::string> getAllocConstructor(MemRefType type);
 };
 
 }  // namespace mlir::heir::openfhe
