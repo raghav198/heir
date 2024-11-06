@@ -1,16 +1,13 @@
 #include "lib/Transforms/MergeLUTs/MergeLUTs.h"
 
-#include <iostream>
-
 #include "lib/Dialect/Comb/IR/CombOps.h"
 #include "lib/Graph/Graph.h"
 #include "lib/Transforms/MergeLUTs/LutMergingUtils.h"
 #include "lib/Transforms/MergeLUTs/SynthesizeArithmeticLut.h"
-#include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"   // from @llvm-project
+#include "llvm/include/llvm/Support/Debug.h"  // from @llvm-project
+#include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // IWYU pragma: keep // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinAttributes.h"
-#include "llvm/include/llvm/Support/Debug.h"  // from @llvm-project
 
 #define DEBUG_TYPE "merge-luts"
 
@@ -20,8 +17,8 @@ namespace heir {
 #define GEN_PASS_DEF_MERGELUTS
 #include "lib/Transforms/MergeLUTs/MergeLUTs.h.inc"
 
-int getCost(mlir::Operation *producer,
-            const std::vector<mlir::Operation *> &consumers) {
+static int getCost(mlir::Operation *producer,
+                   const std::vector<mlir::Operation *> &consumers) {
   int cost = 0;
   auto producerTable = llvm::cast<comb::TruthTableOp>(producer);
   //   int producerArity = producerTable.getLookupTableInputs().size();
@@ -47,8 +44,8 @@ int getCost(mlir::Operation *producer,
   return cost;
 }
 
-mlir::Operation *nextLutToMerge(mlir::Operation *root,
-                                graph::Graph<mlir::Operation *> &lutGraph) {
+static mlir::Operation *nextLutToMerge(
+    mlir::Operation *root, graph::Graph<mlir::Operation *> &lutGraph) {
   static std::set<mlir::Operation *> alreadyMerged;
 
   // Return the vertex with the minimum non-zero out-degree, or nullptr if no
@@ -75,38 +72,41 @@ mlir::Operation *nextLutToMerge(mlir::Operation *root,
   return next;
 }
 
-bool performSingleMerge(mlir::Operation *user, mlir::Operation *lutToMerge,
-                        mlir::OpBuilder &builder) {
-  auto mergeResult =
-      mergeLutsIfPossible(llvm::cast<comb::TruthTableOp>(user),
-                          llvm::cast<comb::TruthTableOp>(lutToMerge), builder);
-  if (mlir::failed(mergeResult)) return false;
+// static bool performSingleMerge(mlir::Operation *user, mlir::Operation
+// *lutToMerge,
+//                         mlir::OpBuilder &builder) {
+//   auto mergeResult =
+//       mergeLutsIfPossible(llvm::cast<comb::TruthTableOp>(user),
+//                           llvm::cast<comb::TruthTableOp>(lutToMerge),
+//                           builder);
+//   if (mlir::failed(mergeResult)) return false;
 
-  auto [userInputs, lookupTable, synthesisResult] = *mergeResult;
+//   auto [userInputs, lookupTable, synthesisResult] = *mergeResult;
 
-  builder.setInsertionPointAfter(user);
-  auto lookupTableOp = builder.create<comb::TruthTableOp>(
-      user->getLoc(), userInputs, lookupTable);
+//   builder.setInsertionPointAfter(user);
+//   auto lookupTableOp = builder.create<comb::TruthTableOp>(
+//       user->getLoc(), userInputs, lookupTable);
 
-  lookupTableOp->setAttr("coefficients", builder.getDenseI32ArrayAttr(
-                                             synthesisResult.coefficients));
-  lookupTableOp->setAttr(
-      "prepped_lut",
-      builder.getIntegerAttr(builder.getIntegerType(synthesisResult.lutSize),
-                             synthesisResult.lookupTable));
+//   lookupTableOp->setAttr("coefficients", builder.getDenseI32ArrayAttr(
+//                                              synthesisResult.coefficients));
+//   lookupTableOp->setAttr(
+//       "prepped_lut",
+//       builder.getIntegerAttr(builder.getIntegerType(synthesisResult.lutSize),
+//                              synthesisResult.lookupTable));
 
-  LLVM_DEBUG({
-    llvm::dbgs() << "Built new op: " << lookupTableOp << "\n";
-    llvm::dbgs() << "Replacing all uses of " << user->getResult(0)
-                 << " with new op\n";
-  });
+//   LLVM_DEBUG({
+//     llvm::dbgs() << "Built new op: " << lookupTableOp << "\n";
+//     llvm::dbgs() << "Replacing all uses of " << user->getResult(0)
+//                  << " with new op\n";
+//   });
 
-  user->getResult(0).replaceAllUsesWith({lookupTableOp});
-  return true;
-}
+//   user->getResult(0).replaceAllUsesWith({lookupTableOp});
+//   return true;
+// }
 
-void executeMerge(mlir::Operation *user, const LutMergeResult &mergeResult,
-                  mlir::OpBuilder &builder) {
+static void executeMerge(mlir::Operation *user,
+                         const LutMergeResult &mergeResult,
+                         mlir::OpBuilder &builder) {
   LLVM_DEBUG(llvm::dbgs() << "Executing merge on " << user << "\n");
   auto [userInputs, lookupTable, synthesisResult] = mergeResult;
 
@@ -165,6 +165,11 @@ struct MergeLUTs : public impl::MergeLUTsBase<MergeLUTs> {
       if (mergeResults.size() != lutGraph.edgesOutOf(lutToMerge).size())
         continue;
       for (auto &[user, result] : mergeResults) {
+        // llvm::dbgs()
+        //     << "Merging "
+        //     << llvm::cast<comb::TruthTableOp>(lutToMerge).getLookupTable()
+        //     << " into " << llvm::cast<comb::TruthTableOp>(user).getLookupTable()
+        //     << " to yield " << result.lookupTable << "\n";
         // llvm::dbgs() << "--(merging " << lutToMerge->getResult(0) << " into "
         //              << user->getResult(0) << ")--\n";
         executeMerge(user, result, builder);

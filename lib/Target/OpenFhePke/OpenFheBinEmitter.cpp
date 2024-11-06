@@ -9,12 +9,11 @@
 #include "lib/Dialect/Openfhe/IR/OpenfheOps.h"
 #include "lib/Target/OpenFhePke/OpenFheUtils.h"
 #include "lib/Target/Utils.h"
-#include "llvm/ADT/TypeSwitch.h"                       // from @llvm-project
-#include "llvm/include/llvm/Support/FormatVariadic.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/include/mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/include/mlir/Support/LLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Tools/mlir-translate/Translation.h"  // from @llvm-project
+#include "llvm/ADT/TypeSwitch.h"                       // from @llvm-project
+#include "llvm/include/llvm/Support/FormatVariadic.h"  // from @llvm-project
 
 namespace mlir::heir::openfhe {
 
@@ -357,21 +356,21 @@ void copy(const vector_view<S>& dest, const vector_view<T>& source) {
 )cpp";
 // clang-format on
 
-llvm::SmallVector<std::pair<int, int>> getIntervals(
-    const llvm::ArrayRef<int> &values) {
-  llvm::SmallVector<std::pair<int, int>> intervals;
-  std::pair<int, int> current{values[0], values[0]};
-  for (int value : values) {
-    if (value == current.second + 1) {
-      current.second = value;
-    } else if (value != current.second) {
-      intervals.push_back(current);
-      current = {value, value};
-    }
-  }
-  if (intervals.end()->first != current.first) intervals.push_back(current);
-  return intervals;
-}
+// static llvm::SmallVector<std::pair<int, int>> getIntervals(
+//     const llvm::ArrayRef<int> &values) {
+//   llvm::SmallVector<std::pair<int, int>> intervals;
+//   std::pair<int, int> current{values[0], values[0]};
+//   for (int value : values) {
+//     if (value == current.second + 1) {
+//       current.second = value;
+//     } else if (value != current.second) {
+//       intervals.push_back(current);
+//       current = {value, value};
+//     }
+//   }
+//   if (intervals.end()->first != current.first) intervals.push_back(current);
+//   return intervals;
+// }
 
 void registerToOpenFheBinTranslation() {
   TranslateFromMLIRRegistration reg(

@@ -1,7 +1,7 @@
 #ifndef HEIR_LIB_TRANSFORMS_MERGELUTS_MERGELUTS_H_
 #define HEIR_LIB_TRANSFORMS_MERGELUTS_MERGELUTS_H_
 
-#include "mlir/include/mlir/Pass/Pass.h"
+#include "mlir/include/mlir/Pass/Pass.h" // IWYU pragma: keep
 
 namespace mlir
 {
