@@ -199,9 +199,10 @@ mlir::FailureOr<LutMergeResult> mergeLutsIfPossible(
   auto synthesisResult = synthesizer.synthesize(lookupTable);
   if (mlir::failed(synthesisResult)) return mlir::failure();
 
-  return LutMergeResult{.arithmeticLookupTable = *synthesisResult,
+  return LutMergeResult{.userInputs = userInputs.takeVector(),
                         .lookupTable = lookupTable,
-                        .userInputs = userInputs.takeVector()};
+                        .arithmeticLookupTable = *synthesisResult
+                        };
 }
 
 }  // namespace heir
