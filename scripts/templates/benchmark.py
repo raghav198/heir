@@ -98,6 +98,7 @@ class CLI:
         benchmark_opt = benchmark_root / f"{benchmark_name}.opt.cpp"
         benchmark_unopt = benchmark_root / f"{benchmark_name}.unopt.cpp"
         benchmark_hdrs = benchmark_root / f"{benchmark_name}.hpp"
+        time_file = benchmark_root / "time.txt"
         
         ir_path = benchmark_root / "IR"
         if not benchmark_root.exists():
@@ -146,7 +147,8 @@ class CLI:
         
         benchmark_unopt.write_text(unopt_codegen)
         end = time.time()
-        print(f"done! ({int((end - start))} sec)")
+        unopt_time = end - start
+        print(f"done! ({int(unopt_time)} sec)")
 
         start = time.time()
         print(f"Compiling {benchmark_name}.opt...", end="", flush=True)
@@ -166,7 +168,8 @@ class CLI:
         (ir_path / "unopt.mlir").write_text(unopt_compiled.decode())
         (ir_path / "opt.mlir").write_text(opt_compiled.decode())
         end = time.time()
-        print(f"done! ({int((end - start))} sec)")
+        opt_time = end - start
+        print(f"done! ({int(opt_time)} sec)")
         
         header = try_run(
             f"Header generation of {benchmark_name}", 
@@ -175,6 +178,8 @@ class CLI:
         ).stdout.decode()
         benchmark_hdrs.write_text(header)
         print(f"Wrote headers to {benchmark_hdrs}")
+        
+        time_file.write_text(f"Unopt: {unopt_time} seconds\nOpt: {opt_time} seconds")
 
 
 if __name__ == "__main__":
