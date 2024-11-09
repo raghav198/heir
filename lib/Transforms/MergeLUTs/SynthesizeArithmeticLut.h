@@ -22,7 +22,13 @@ struct ArithmeticLut {
 };
 
 struct ArithmeticLutSynthesizer {
-    static ArithmeticLutSynthesizer& getInstance();
+    int solverTimeout;
+    static uint64_t solverMaxFailures;
+    static uint64_t solverMaxBranches;
+    static uint64_t solverMaxTime;
+    static uint64_t solverSolutions;
+
+    static ArithmeticLutSynthesizer& getInstance(int solverTimeout);
     mlir::FailureOr<ArithmeticLut> synthesize(mlir::IntegerAttr lookupTable, int maxLutSize = 8);
 private:
     mlir::DenseMap<mlir::IntegerAttr, mlir::FailureOr<ArithmeticLut>> synthesizedCache;

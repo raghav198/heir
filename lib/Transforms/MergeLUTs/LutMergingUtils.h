@@ -31,7 +31,7 @@ int composeLookupTables(
 
 mlir::APInt getMergedLookupTable(comb::TruthTableOp user, comb::TruthTableOp lutToMerge, mlir::SetVector<Value> userInputs);
 
-mlir::FailureOr<LutMergeResult> mergeLutsIfPossible(comb::TruthTableOp user, comb::TruthTableOp lutToMerge, mlir::OpBuilder &builder);
+mlir::FailureOr<LutMergeResult> mergeLutsIfPossible(comb::TruthTableOp user, comb::TruthTableOp lutToMerge, mlir::OpBuilder &builder, int solverTimeout, uint64_t &solverMaxFailures, uint64_t &solverMaxBranches, uint64_t &solverMaxTime, uint64_t &solverSolutions);
 
 } // namespace heir
 } // namespace mlir

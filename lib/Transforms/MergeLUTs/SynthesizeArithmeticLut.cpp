@@ -41,9 +41,16 @@ mlir::IntegerAttr ArithmeticLut::buildAttr(mlir::OpBuilder &builder)
     return builder.getIntegerAttr(type, lookupTable);
 }
 
-ArithmeticLutSynthesizer& ArithmeticLutSynthesizer::getInstance()
+uint64_t ArithmeticLutSynthesizer::solverMaxFailures = 0;
+uint64_t ArithmeticLutSynthesizer::solverMaxBranches = 0;
+uint64_t ArithmeticLutSynthesizer::solverMaxTime = 0;
+uint64_t ArithmeticLutSynthesizer::solverSolutions = 0;
+
+ArithmeticLutSynthesizer& ArithmeticLutSynthesizer::getInstance(int solverTimeout)
 {
     static ArithmeticLutSynthesizer instance;
+    instance.solverTimeout = solverTimeout;
+
     return instance;
 }
 
@@ -99,7 +106,7 @@ mlir::FailureOr<ArithmeticLut> ArithmeticLutSynthesizer::doSynth(mlir::IntegerAt
     });
 
     operations_research::Solver solver("solver");
-    auto *timeLimit = solver.MakeTimeLimit(absl::Milliseconds(1500));
+    auto *timeLimit = solver.MakeTimeLimit(absl::Milliseconds(solverTimeout));
     coefficientVars.reserve(arity);
     
     for (int i = 0; i < arity; i++) coefficientVars.push_back(solver.MakeIntVar(1 - maxLutSize, maxLutSize - 1));
@@ -143,18 +150,36 @@ mlir::FailureOr<ArithmeticLut> ArithmeticLutSynthesizer::doSynth(mlir::IntegerAt
     }
 
     operations_research::DecisionBuilder *db = solver.MakePhase(
-        coefficientVars, operations_research::Solver::CHOOSE_FIRST_UNBOUND, 
+        coefficientVars, operations_research::Solver::CHOOSE_MIN_SIZE_LOWEST_MIN, 
                                     operations_research::Solver::ASSIGN_MIN_VALUE);
 
     solver.NewSearch(db, timeLimit);
+    std::vector<int> solCoefficients;
+    bool foundSol = false;
+    int foundSolTime = 0;
     while (solver.NextSolution())
     {
-        std::vector<int> coefficients = resolve(coefficientVars);
+        solCoefficients = resolve(coefficientVars);
         LLVM_DEBUG(llvm::dbgs() << "\tSUCCESS\n");
-        std::reverse(coefficients.begin(), coefficients.end());
-        return ArithmeticLut(resolve(ones), resolve(zeros), coefficients, maxLutSize);
+        std::reverse(solCoefficients.begin(), solCoefficients.end());
+        foundSol = true;
+        foundSolTime = ToUnixMicros(solver.Now());
+        break;
     }
-    solver.EndSearch();
+    LLVM_DEBUG(llvm::dbgs() << "solution synthesis stats: " << foundSol << "): (" << solver.solutions() << "): (" << solver.failures() << ")\n");
+
+    if (foundSol) {
+        solverSolutions++;
+        if (solver.failures() > solverMaxFailures)
+            solverMaxFailures = solver.failures();
+        if (solver.branches() > solverMaxBranches)
+            solverMaxBranches = solver.branches();
+        if (foundSolTime > solverMaxTime)
+            solverMaxTime = foundSolTime;
+
+        return ArithmeticLut(resolve(ones), resolve(zeros), solCoefficients, maxLutSize);
+    }
+
     LLVM_DEBUG(llvm::dbgs() << "\tFAILURE\n");
     return mlir::failure();
 }
