@@ -199,7 +199,8 @@ mlir::FailureOr<LutMergeResult> mergeLutsIfPossible(
 
   return LutMergeResult{.userInputs = userInputs.takeVector(),
                         .lookupTable = lookupTable,
-                        .arithmeticLookupTable = *synthesisResult};
+                        .arithmeticLookupTable = *synthesisResult
+                        };
 }
 
 }  // namespace heir

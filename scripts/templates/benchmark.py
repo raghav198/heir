@@ -165,6 +165,9 @@ class CLI:
         ).stdout.decode()
         
         benchmark_opt.write_text(opt_codegen)
+        if not ir_path.exists():
+            os.makedirs(ir_path)
+
         (ir_path / "unopt.mlir").write_text(unopt_compiled.decode())
         (ir_path / "opt.mlir").write_text(opt_compiled.decode())
         end = time.time()

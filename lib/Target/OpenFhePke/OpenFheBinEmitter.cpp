@@ -169,7 +169,7 @@ public:
 
     std::vector<T> copy() const {
         std::vector<T> copied;
-        for (int i = 0; i < size(); i++) {
+        for (size_t i = 0; i < size(); i++) {
             if constexpr (dim<decltype(data)> == 1) {
                 copied.push_back(this->operator[](i));
             } else {
@@ -184,7 +184,7 @@ public:
         if (index == nullptr) {
             index = &local_index;
         }
-        for (int i = 0; i < size(); i++) {
+        for (size_t i = 0; i < size(); i++) {
             if constexpr (dim<decltype(data)> == 1) {
                 dest[(*index)++] = this->operator[](i);
             } else {
@@ -194,7 +194,7 @@ public:
     }
 
     void flatten(std::vector<underlying_t>& dest) const {
-        for (int i = 0; i < size(); i++) {
+        for (size_t i = 0; i < size(); i++) {
             if constexpr (dim<decltype(data)> == 1) {
                 dest.push_back(this->operator[](i));
             } else {
@@ -209,7 +209,7 @@ public:
             index = &local_index;
         }
 
-        for (int i = 0; i < size(); i++) {
+        for (size_t i = 0; i < size(); i++) {
             if constexpr (dim<decltype(data)> == 1) {
                 this->operator[](i) = dest[(*index)++];
             } else {
@@ -539,10 +539,10 @@ LogicalResult OpenFheBinEmitter::printOperation(
 }
 
 SmallVector<std::string> OpenFheBinEmitter::getStaticDynamicArgs(
-    SmallVector<mlir::Value> dynamicArgs, ArrayRef<long long> staticArgs) {
+    SmallVector<mlir::Value> dynamicArgs, ArrayRef<int64_t> staticArgs) {
   SmallVector<std::string> args;
   int dynamicIndex = 0;
-  for (long long staticArg : staticArgs) {
+  for (int64_t staticArg : staticArgs) {
     if (staticArg == ShapedType::kDynamic) {
       args.push_back(
           variableNames->getNameForValue(dynamicArgs[dynamicIndex++]));
@@ -555,7 +555,7 @@ SmallVector<std::string> OpenFheBinEmitter::getStaticDynamicArgs(
 
 template <
     class T,
-    typename = std::enable_if_t<
+    typename = typename std::enable_if_t<
         std::disjunction<std::is_same<T, memref::SubViewOp>,
                          std::is_same<T, memref::ReinterpretCastOp>>::value,
         bool>>
@@ -568,7 +568,7 @@ std::string OpenFheBinEmitter::getSubviewArgs(T op) {
       getStaticDynamicArgs(op.getSizes(), op.getStaticSizes());
 
   SmallVector<std::string> viewStrings;
-  for (int i = 0; i < offsets.size(); i++) {
+  for (size_t i = 0; i < offsets.size(); i++) {
     SmallString<8> viewString;
     llvm::raw_svector_ostream ss(viewString);
     ss << "view_t(" << offsets[i] << ", " << strides[i] << ", " << sizes[i]
