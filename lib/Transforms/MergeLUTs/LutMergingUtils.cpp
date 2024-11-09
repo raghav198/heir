@@ -179,7 +179,9 @@ mlir::APInt getMergedLookupTable(comb::TruthTableOp user,
 
 mlir::FailureOr<LutMergeResult> mergeLutsIfPossible(
     comb::TruthTableOp user, comb::TruthTableOp lutToMerge,
-    mlir::OpBuilder& builder) {
+    mlir::OpBuilder& builder, int solverTimeout,
+    uint64_t &solverMaxFailures, uint64_t &solverMaxBranches,
+    uint64_t &solverMaxTime, uint64_t &solverSolutions) {
   mlir::SetVector<Value> userInputs;
   for (auto input : user.getLookupTableInputs()) {
     if (input.getDefiningOp<comb::TruthTableOp>() == lutToMerge) {
@@ -195,8 +197,13 @@ mlir::FailureOr<LutMergeResult> mergeLutsIfPossible(
   auto lookupTable = builder.getIntegerAttr(
       builder.getIntegerType(1 << userInputs.size(), false), mergedLookupTable);
 
-  auto synthesizer = ArithmeticLutSynthesizer::getInstance();
+  auto synthesizer = ArithmeticLutSynthesizer::getInstance(solverTimeout);
   auto synthesisResult = synthesizer.synthesize(lookupTable);
+  solverMaxFailures = synthesizer.solverMaxFailures;
+  solverMaxBranches = synthesizer.solverMaxBranches;
+  solverSolutions = synthesizer.solverSolutions;
+  solverMaxTime = synthesizer.solverMaxTime;
+
   if (mlir::failed(synthesisResult)) return mlir::failure();
 
   return LutMergeResult{.userInputs = userInputs.takeVector(),

@@ -8,6 +8,7 @@
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // IWYU pragma: keep // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinAttributes.h"
+#include "mlir/include/mlir/Pass/PassOptions.h"            // from @llvm-project
 
 #define DEBUG_TYPE "merge-luts"
 
@@ -147,11 +148,22 @@ struct MergeLUTs : public impl::MergeLUTsBase<MergeLUTs> {
       mlir::DenseMap<mlir::Operation *, LutMergeResult> mergeResults;
 
       for (auto *user : lutGraph.edgesOutOf(lutToMerge)) {
+        uint64_t solverMaxFailures_ = 0, solverMaxBranches_ = 0;
+        uint64_t solverMaxTime_ = 0, solverSolutions_ = 0;
         LLVM_DEBUG(llvm::dbgs()
                    << "Try merge " << *lutToMerge << " to " << *user << "\n");
         auto result = mergeLutsIfPossible(
             llvm::cast<comb::TruthTableOp>(user),
-            llvm::cast<comb::TruthTableOp>(lutToMerge), builder);
+            llvm::cast<comb::TruthTableOp>(lutToMerge),
+            builder, solverTimeout,
+            solverMaxFailures_, solverMaxBranches_,
+            solverMaxTime_, solverSolutions_);
+        // update solver statistics
+        solverMaxFailures = solverMaxFailures_;
+        solverMaxBranches = solverMaxBranches_;
+        solverMaxTime = solverMaxTime_;
+        solverSolutions = solverSolutions_;
+
         if (mlir::succeeded(result))
           mergeResults.insert({user, *result});
         else
