@@ -11,7 +11,7 @@ def MergeLUTs : Pass<"merge-luts", "func::FuncOp"> {
     }];
 
     let options = [
-        Option<"solverTimeout", "solver-timeout", "int", "1500",
+        Option<"solverTimeout", "solver-timeout", "int", "500",
                "Set the timeout for the ILP solver in milliseconds">,
     ];
 
