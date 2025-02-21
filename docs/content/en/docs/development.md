@@ -72,17 +72,6 @@ For the best experience, we recommend following these steps:
   these files, you may need to build those targets and then re-run the
   `refresh_all` command above.
 
-- NOTE: In order to share bazel's build cache between invocations from VScode's
-  GUI and the terminal, you need to create a `.bazelrc` in your home directory
-  that sets the compilation toolchain to clang. Alternatively, you can set this
-  in your vscode settings to only apply to the current workspace, but this means
-  switching between compilation from terminal and from VSCode will trigger
-  rebuilds.
-
-  ```bash
-  echo -e "# enforces clang use\ncommon --repo_env=CC=clang" > ~/.bazelrc
-  ```
-
 - It might be necesssary to add the path to your buildifier to VSCode, though it
   should be auto-detected.
 
@@ -216,6 +205,65 @@ Based on what you're trying to do, this may require some extra steps.
 
 Send any upstream changes to HEIR-relevant MLIR files to @j2kun (Jeremy Kun) who
 has LLVM commit access and can also suggest additional MLIR reviewers.
+
+## Tips for building dependencies / useful external libraries
+
+### MLIR
+
+Instructions for building MLIR can be found on the
+[Getting started](https://mlir.llvm.org/getting_started/) page of the MLIR
+website. The instructions there seem to work as written (tested on Ubuntu
+22.04). However, the command shown in `Unix-like compile/testing:` may require a
+large amount of RAM. If building on a system with 16GB of RAM or less, and if
+you don't plan to target GPUs, you may want to replace the line
+
+```
+   -DLLVM_TARGETS_TO_BUILD="Native;NVPTX;AMDGPU" \
+```
+
+with
+
+```
+   -DLLVM_TARGETS_TO_BUILD="Native" \
+```
+
+### OpenFHE
+
+A simple way to build OpenFHE is to follow the instructions in the
+[openfhe-configurator](https://github.com/openfheorg/openfhe-configurator)
+repository. This allows to build the library with or without support for the
+Intel [HEXL library](https://github.com/intel/hexl). First, clone the repository
+and configure it using:
+
+```
+git clone https://github.com/openfheorg/openfhe-configurator.git
+cd openfhe-configurator
+scripts/configure.sh
+```
+
+You will be asked whether to stage a vanilla OpenFHE build or add support for
+HEXL. You can then build the library using
+
+```
+./scripts/build-openfhe-development.sh
+```
+
+The build may fail on systems with less than 32GB or RAM due to parallel
+compilation. You can disable it by editing
+`./scripts/build-openfhe-development.sh` and replacing
+
+```
+make -j || abort "Build of openfhe-development failed."
+```
+
+with
+
+```
+make || abort "Build of openfhe-development failed."
+```
+
+Compilation will be significantly slower but should then take less than 8GB of
+memory.
 
 ## Creating a New Pass
 

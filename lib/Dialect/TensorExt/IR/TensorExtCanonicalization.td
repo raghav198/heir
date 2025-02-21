@@ -2,7 +2,7 @@
 #define LIB_DIALECT_TENSOREXT_IR_TENSOREXTCANONICALIZATION_TD_
 
 include "TensorExtOps.td"
-include "lib/DRR/Utils.td"
+include "lib/Utils/DRR/Utils.td"
 include "mlir/Dialect/Arith/IR/ArithOps.td"
 include "mlir/Dialect/Tensor/IR/TensorOps.td"
 include "mlir/IR/PatternBase.td"
@@ -16,6 +16,12 @@ def OutOfBoundsOfTensorDim :
     >
   >;
 
+def IsOneDimTensor : Constraint<
+  CPred<
+    "llvm::cast<mlir::ShapedType>($0.getType()).getRank() == 1"
+  >
+>;
+
 // rotate %t, 0 -> %t
 def DropZeroRotation : Pat<
   (TensorExt_RotateOp $tensor, (ConstantLikeMatcher APIntAttr:$c0)),
@@ -23,6 +29,9 @@ def DropZeroRotation : Pat<
   [(IsZeroIntAttr $c0)]
 >;
 
+// Currently commented out because it doesn't work for multi-dimensional tensors.
+// Will be uncommented and fixed by Asra's PR. Commenting this out causes various
+// other tests to fail.
 // rotate %t, x -> rotate %t, x mod size
 def NormalizeRotationIndex : Pat<
   (TensorExt_RotateOp $tensor, (Arith_ConstantOp:$shiftOp APIntAttr:$shiftAmount)),
@@ -35,7 +44,8 @@ def NormalizeRotationIndex : Pat<
           (Tensor_DimOp $tensor, (Arith_ConstantOp ConstantAttr<IndexAttr, "0">)),
           $shiftOp))
       ),
-  [(OutOfBoundsOfTensorDim $shiftAmount, $tensor)]
+  [(OutOfBoundsOfTensorDim $shiftAmount, $tensor),
+   (IsOneDimTensor $tensor)]
 >;
 
 // %0 = rotate %t, x
@@ -60,7 +70,7 @@ def RotatePlusExtractToIndexedExtract : Pat<
     (MakeSingleResultVariadic (Arith_AddIOp $shift, $index, DefOverflow)))
 >;
 
-foreach ArithOp = [Arith_AddIOp, Arith_SubIOp, Arith_MulIOp] in {
+foreach ArithOp = [Arith_AddIOp, Arith_SubIOp, Arith_MulIOp, Arith_AddFOp, Arith_SubFOp, Arith_MulFOp] in {
   // Rotating two tensors by the same amount can be converted to a single
   // post-rotation. This can result in eliminating either the rotation (because
   // it can be combined with a later rotation) or the arith op itself, if it is

@@ -46,7 +46,7 @@ struct RotateAndReduce : impl::RotateAndReduceBase<RotateAndReduce> {
                << "Trying to replace rotations ending in " << *op << "\n");
     auto b = ImplicitLocOpBuilder(op->getLoc(), op);
     auto tensor = reduction.getTensor();
-    Operation *finalOp;
+    Operation *finalOp = nullptr;
     auto tensorShape =
         mlir::cast<RankedTensorType>(tensor.getType()).getShape();
     for (int64_t shiftSize = tensorShape[0] / 2; shiftSize > 0;
@@ -65,10 +65,12 @@ struct RotateAndReduce : impl::RotateAndReduceBase<RotateAndReduce> {
       auto extractOp = b.create<tensor::ExtractOp>(
           finalOp->getResult(0),
           b.create<arith::ConstantIndexOp>(0).getResult());
-      op->replaceAllUsesWith(extractOp);
-    } else {
-      op->replaceAllUsesWith(finalOp);
+      finalOp = extractOp;
     }
+    for (auto value : reduction.getSavedValues()) {
+      finalOp = b.create<ArithOp>(finalOp->getResult(0), value);
+    }
+    if (finalOp) op->replaceAllUsesWith(finalOp);
     LLVM_DEBUG(llvm::dbgs() << "Post-replacement: " << *parentOp << "\n");
   }
 
@@ -111,6 +113,14 @@ struct RotateAndReduce : impl::RotateAndReduceBase<RotateAndReduce> {
                     })
                     .Case<arith::MulIOp>([&](auto arithOp) {
                       tryReplaceRotations<arith::MulIOp>(arithOp, reduction,
+                                                         extraction);
+                    })
+                    .Case<arith::AddFOp>([&](auto arithOp) {
+                      tryReplaceRotations<arith::AddFOp>(arithOp, reduction,
+                                                         extraction);
+                    })
+                    .Case<arith::MulFOp>([&](auto arithOp) {
+                      tryReplaceRotations<arith::MulFOp>(arithOp, reduction,
                                                          extraction);
                     });
               }

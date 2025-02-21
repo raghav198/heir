@@ -1,11 +1,25 @@
+#include <utility>
+
 #include "lib/Dialect/Secret/IR/SecretDialect.h"
 #include "lib/Dialect/Secret/IR/SecretOps.h"
 #include "lib/Dialect/Secret/IR/SecretTypes.h"
 #include "lib/Transforms/Secretize/Passes.h"
+#include "llvm/include/llvm/ADT/STLExtras.h"            // from @llvm-project
+#include "llvm/include/llvm/ADT/SmallVector.h"          // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
+#include "mlir/include/mlir/IR/Block.h"                 // from @llvm-project
+#include "mlir/include/mlir/IR/Builders.h"              // from @llvm-project
+#include "mlir/include/mlir/IR/BuiltinTypes.h"          // from @llvm-project
 #include "mlir/include/mlir/IR/IRMapping.h"             // from @llvm-project
-#include "mlir/include/mlir/Transforms/GreedyPatternRewriteDriver.h"  // from @llvm-project
-#include "mlir/include/mlir/Transforms/Passes.h"  // from @llvm-project
+#include "mlir/include/mlir/IR/Location.h"              // from @llvm-project
+#include "mlir/include/mlir/IR/MLIRContext.h"           // from @llvm-project
+#include "mlir/include/mlir/IR/PatternMatch.h"          // from @llvm-project
+#include "mlir/include/mlir/IR/Types.h"                 // from @llvm-project
+#include "mlir/include/mlir/IR/Value.h"                 // from @llvm-project
+#include "mlir/include/mlir/IR/ValueRange.h"            // from @llvm-project
+#include "mlir/include/mlir/Support/LLVM.h"             // from @llvm-project
+#include "mlir/include/mlir/Transforms/Passes.h"        // from @llvm-project
+#include "mlir/include/mlir/Transforms/WalkPatternRewriteDriver.h"  // from @llvm-project
 
 namespace mlir {
 namespace heir {
@@ -23,14 +37,15 @@ struct WrapWithGeneric : public OpRewritePattern<func::FuncOp> {
 
     SmallVector<Type, 4> newInputs;
     for (unsigned i = 0; i < op.getNumArguments(); i++) {
-      auto argTy = op.getArgument(i).getType();
+      auto argTy = op.getArgumentTypes()[i];
       if (op.getArgAttr(i, secret::SecretDialect::kArgSecretAttrName) !=
           nullptr) {
         hasSecrets = true;
         op.removeArgAttr(i, secret::SecretDialect::kArgSecretAttrName);
 
         auto newTy = secret::SecretType::get(argTy);
-        op.getArgument(i).setType(newTy);  // Updates the block argument type.
+        if (!op.isDeclaration())
+          op.getArgument(i).setType(newTy);  // Updates the block argument type.
         newInputs.push_back(newTy);
       } else {
         newInputs.push_back(argTy);
@@ -49,10 +64,14 @@ struct WrapWithGeneric : public OpRewritePattern<func::FuncOp> {
     op.setFunctionType(
         FunctionType::get(getContext(), {newInputs}, {newOutputs}));
 
+    // Externally defined functions have no body
+    if (op.isDeclaration()) {
+      return success();
+    }
     // Create a new block where we will insert the new secret.generic and move
     // the function ops into.
     Block &opEntryBlock = op.getRegion().front();
-    auto newBlock = rewriter.createBlock(
+    auto *newBlock = rewriter.createBlock(
         &opEntryBlock, opEntryBlock.getArgumentTypes(),
         SmallVector<Location>(opEntryBlock.getNumArguments(), op.getLoc()));
 
@@ -92,8 +111,7 @@ struct WrapGeneric : impl::WrapGenericBase<WrapGeneric> {
 
     mlir::RewritePatternSet patterns(context);
     patterns.add<WrapWithGeneric>(context);
-
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)walkAndApplyPatterns(getOperation(), std::move(patterns));
   }
 };
 

@@ -1,11 +1,14 @@
 #ifndef LIB_ANALYSIS_SELECTVARIABLENAMES_SELECTVARIABLENAMES_H_
 #define LIB_ANALYSIS_SELECTVARIABLENAMES_SELECTVARIABLENAMES_H_
 
+#include <cassert>
 #include <string>
 
-#include "llvm/include/llvm/ADT/DenseMap.h"  // from @llvm-project
-#include "mlir/include/mlir/IR/Operation.h"  // from @llvm-project
-#include "mlir/include/mlir/IR/Value.h"      // from @llvm-project
+#include "llvm/include/llvm/ADT/DenseMap.h"          // from @llvm-project
+#include "mlir/include/mlir/IR/BuiltinAttributes.h"  // from @llvm-project
+#include "mlir/include/mlir/IR/Operation.h"          // from @llvm-project
+#include "mlir/include/mlir/IR/Value.h"              // from @llvm-project
+#include "mlir/include/mlir/Support/LLVM.h"          // from @llvm-project
 
 namespace mlir {
 namespace heir {
@@ -20,19 +23,21 @@ class SelectVariableNames {
   /// tree that this class was constructed with).
   std::string getNameForValue(Value value) const {
     assert(variableNames.contains(value));
-    return prefix + std::to_string(variableNames.lookup(value));
+    return variableNames.lookup(value);
   }
 
   // Return the unique integer assigned to a given value.
   int getIntForValue(Value value) const {
-    assert(variableNames.contains(value));
-    return variableNames.lookup(value);
+    assert(variableToInteger.contains(value));
+    return variableToInteger.lookup(value);
   }
 
  private:
-  llvm::DenseMap<Value, int> variableNames;
+  std::string suggestNameForValue(Value value);
 
-  std::string prefix{"v"};
+  std::string defaultPrefix{"v"};
+  llvm::DenseMap<Value, std::string> variableNames;
+  llvm::DenseMap<Value, int> variableToInteger;
 };
 
 }  // namespace heir

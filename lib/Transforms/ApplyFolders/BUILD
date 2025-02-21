@@ -1,4 +1,4 @@
-load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
+load("@heir//lib/Transforms:transforms.bzl", "add_heir_transforms")
 
 package(
     default_applicable_licenses = ["@heir//:license"],
@@ -15,31 +15,13 @@ cc_library(
         ":pass_inc_gen",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:TensorDialect",
         "@llvm-project//mlir:TransformUtils",
         "@llvm-project//mlir:Transforms",
     ],
 )
-# ApplyFolders tablegen and headers.
 
-gentbl_cc_library(
-    name = "pass_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-pass-decls",
-                "-name=ApplyFolders",
-            ],
-            "ApplyFolders.h.inc",
-        ),
-        (
-            ["-gen-pass-doc"],
-            "ApplyFoldersPasses.md",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
-    td_file = "ApplyFolders.td",
-    deps = [
-        "@llvm-project//mlir:OpBaseTdFiles",
-        "@llvm-project//mlir:PassBaseTdFiles",
-    ],
+add_heir_transforms(
+    generated_target_name = "pass_inc_gen",
+    pass_name = "ApplyFolders",
 )

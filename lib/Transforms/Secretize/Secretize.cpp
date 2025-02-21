@@ -2,6 +2,12 @@
 #include "lib/Dialect/Secret/IR/SecretTypes.h"
 #include "lib/Transforms/Secretize/Passes.h"
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
+#include "mlir/include/mlir/IR/Builders.h"              // from @llvm-project
+#include "mlir/include/mlir/IR/BuiltinAttributes.h"     // from @llvm-project
+#include "mlir/include/mlir/IR/BuiltinOps.h"            // from @llvm-project
+#include "mlir/include/mlir/IR/MLIRContext.h"           // from @llvm-project
+#include "mlir/include/mlir/IR/SymbolTable.h"           // from @llvm-project
+#include "mlir/include/mlir/Support/LLVM.h"             // from @llvm-project
 #include "mlir/include/mlir/Transforms/GreedyPatternRewriteDriver.h"  // from @llvm-project
 #include "mlir/include/mlir/Transforms/Passes.h"  // from @llvm-project
 
@@ -19,20 +25,29 @@ struct Secretize : impl::SecretizeBase<Secretize> {
     ModuleOp module = getOperation();
     OpBuilder builder(module);
 
-    auto mainFunction = dyn_cast_or_null<func::FuncOp>(
-        SymbolTable::lookupSymbolIn(module, entryFunction));
-    if (!mainFunction) {
-      module.emitError("could not find entry point function");
-      signalPassFailure();
-      return;
-    }
-
     auto secretArgAttr =
         StringAttr::get(ctx, secret::SecretDialect::kArgSecretAttrName);
-    for (unsigned i = 0; i < mainFunction.getNumArguments(); i++) {
-      if (!isa<secret::SecretType>(mainFunction.getArgument(i).getType())) {
-        mainFunction.setArgAttr(i, secretArgAttr, UnitAttr::get(ctx));
+
+    auto setSecretAttr = [&](func::FuncOp func) {
+      for (unsigned i = 0; i < func.getNumArguments(); i++) {
+        if (!isa<secret::SecretType>(func.getArgument(i).getType())) {
+          func.setArgAttr(i, secretArgAttr, UnitAttr::get(ctx));
+        }
       }
+    };
+
+    if (function.empty()) {
+      module.walk([&](func::FuncOp func) { setSecretAttr(func); });
+    } else {
+      auto mainFunction = dyn_cast_or_null<func::FuncOp>(
+          SymbolTable::lookupSymbolIn(module, function));
+      if (!mainFunction) {
+        module.emitError("could not find function \"" + function +
+                         "\" to secretize");
+        signalPassFailure();
+        return;
+      }
+      setSecretAttr(mainFunction);
     }
   }
 };

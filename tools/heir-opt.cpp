@@ -1,9 +1,8 @@
 #include <cstdlib>
+#include <functional>
 #include <memory>
 #include <string>
-#include <vector>
 
-#include "lib/Conversion/BGVToLWE/BGVToLWE.h"
 #include "lib/Conversion/BGVToOpenfhe/BGVToOpenfhe.h"
 #include "lib/Conversion/CGGIToJaxite/CGGIToJaxite.h"
 // #include "lib/Conversion/BGVToPolynomial/BGVToPolynomial.h"
@@ -20,58 +19,87 @@
 #include "lib/Conversion/SecretToBGV/SecretToBGV.h"
 #include "lib/Conversion/SecretToCKKS/SecretToCKKS.h"
 #include "lib/Conversion/TosaToSecretArith/TosaToSecretArith.h"
+#include "lib/Dialect/Arith/Conversions/ArithToCGGI/ArithToCGGI.h"
+#include "lib/Dialect/Arith/Conversions/ArithToCGGIQuart/ArithToCGGIQuart.h"
+#include "lib/Dialect/Arith/Conversions/ArithToModArith/ArithToModArith.h"
+#include "lib/Dialect/BGV/Conversions/BGVToLWE/BGVToLWE.h"
 #include "lib/Dialect/BGV/IR/BGVDialect.h"
+#include "lib/Dialect/CGGI/Conversions/CGGIToJaxite/CGGIToJaxite.h"
+#include "lib/Dialect/CGGI/Conversions/CGGIToTfheRust/CGGIToTfheRust.h"
+#include "lib/Dialect/CGGI/Conversions/CGGIToTfheRustBool/CGGIToTfheRustBool.h"
 #include "lib/Dialect/CGGI/IR/CGGIDialect.h"
 #include "lib/Dialect/CGGI/Transforms/CGGICanonicalizeToLuts.h"
 #include "lib/Dialect/CGGI/Transforms/Passes.h"
+#include "lib/Dialect/CKKS/Conversions/CKKSToLWE/CKKSToLWE.h"
 #include "lib/Dialect/CKKS/IR/CKKSDialect.h"
 #include "lib/Dialect/Comb/IR/CombDialect.h"
 // #include "lib/Dialect/Comb/Transforms/GateToLut.h"
 // #include "lib/Dialect/Comb/Transforms/Passes.h"
 #include "lib/Dialect/Jaxite/IR/JaxiteDialect.h"
+#include "lib/Dialect/LWE/Conversions/LWEToLattigo/LWEToLattigo.h"
+#include "lib/Dialect/LWE/Conversions/LWEToOpenfhe/LWEToOpenfhe.h"
+#include "lib/Dialect/LWE/Conversions/LWEToPolynomial/LWEToPolynomial.h"
 #include "lib/Dialect/LWE/IR/LWEDialect.h"
-#include "lib/Dialect/LWE/Transforms/AddClientInterface.h"
 #include "lib/Dialect/LWE/Transforms/Passes.h"
+#include "lib/Dialect/Lattigo/IR/LattigoDialect.h"
+#include "lib/Dialect/Lattigo/Transforms/Passes.h"
+#include "lib/Dialect/LinAlg/Conversions/LinalgToTensorExt/LinalgToTensorExt.h"
+#include "lib/Dialect/Mgmt/IR/MgmtDialect.h"
+#include "lib/Dialect/Mgmt/Transforms/Passes.h"
+#include "lib/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "lib/Dialect/ModArith/IR/ModArithDialect.h"
+#include "lib/Dialect/ModArith/Transforms/Passes.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheDialect.h"
-#include "lib/Dialect/Openfhe/Transforms/ConfigureCryptoContext.h"
 #include "lib/Dialect/Openfhe/Transforms/Passes.h"
-#include "lib/Dialect/Polynomial/Transforms/NTTRewrites.h"
+#include "lib/Dialect/Polynomial/Conversions/PolynomialToModArith/PolynomialToModArith.h"
+#include "lib/Dialect/Polynomial/IR/PolynomialDialect.h"
 #include "lib/Dialect/Polynomial/Transforms/Passes.h"
 #include "lib/Dialect/RNS/IR/RNSDialect.h"
 #include "lib/Dialect/RNS/IR/RNSTypes.h"
 #include "lib/Dialect/Random/IR/RandomDialect.h"
+#include "lib/Dialect/Secret/Conversions/SecretToBGV/SecretToBGV.h"
+#include "lib/Dialect/Secret/Conversions/SecretToCGGI/SecretToCGGI.h"
+#include "lib/Dialect/Secret/Conversions/SecretToCKKS/SecretToCKKS.h"
 #include "lib/Dialect/Secret/IR/SecretDialect.h"
 #include "lib/Dialect/Secret/Transforms/BufferizableOpInterfaceImpl.h"
-#include "lib/Dialect/Secret/Transforms/DistributeGeneric.h"
 #include "lib/Dialect/Secret/Transforms/Passes.h"
+#include "lib/Dialect/TOSA/Conversions/TosaToSecretArith/TosaToSecretArith.h"
 #include "lib/Dialect/TensorExt/IR/TensorExtDialect.h"
-#include "lib/Dialect/TensorExt/Transforms/CollapseInsertionChains.h"
-#include "lib/Dialect/TensorExt/Transforms/InsertRotate.h"
 #include "lib/Dialect/TensorExt/Transforms/Passes.h"
-#include "lib/Dialect/TensorExt/Transforms/RotateAndReduce.h"
 #include "lib/Dialect/TfheRust/IR/TfheRustDialect.h"
 #include "lib/Dialect/TfheRustBool/IR/TfheRustBoolDialect.h"
+#include "lib/Pipelines/ArithmeticPipelineRegistration.h"
+#include "lib/Pipelines/PipelineRegistration.h"
+#include "lib/Transforms/AnnotateSecretness/AnnotateSecretness.h"
 #include "lib/Transforms/ApplyFolders/ApplyFolders.h"
 #include "lib/Transforms/ConvertIfToSelect/ConvertIfToSelect.h"
 #include "lib/Transforms/ConvertSecretExtractToStaticExtract/ConvertSecretExtractToStaticExtract.h"
 #include "lib/Transforms/ConvertSecretForToStaticFor/ConvertSecretForToStaticFor.h"
 #include "lib/Transforms/ConvertSecretInsertToStaticInsert/ConvertSecretInsertToStaticInsert.h"
 #include "lib/Transforms/ConvertSecretWhileToStaticFor/ConvertSecretWhileToStaticFor.h"
+#include "lib/Transforms/DropUnitDims/DropUnitDims.h"
 #include "lib/Transforms/ElementwiseToAffine/ElementwiseToAffine.h"
+#include "lib/Transforms/ForwardInsertToExtract/ForwardInsertToExtract.h"
 #include "lib/Transforms/ForwardStoreToLoad/ForwardStoreToLoad.h"
 #include "lib/Transforms/FullLoopUnroll/FullLoopUnroll.h"
+#include "lib/Transforms/LayoutPropagation/LayoutPropagation.h"
 #include "lib/Transforms/LinalgCanonicalizations/LinalgCanonicalizations.h"
-#include "lib/Transforms/OperationBalancer/OperationBalancer.h"
 #include "lib/Transforms/MergeLUTs/MergeLUTs.h"
+#include "lib/Transforms/OperationBalancer/OperationBalancer.h"
+#include "lib/Transforms/OptimizeRelinearization/OptimizeRelinearization.h"
+#include "lib/Transforms/SecretInsertMgmt/Passes.h"
 #include "lib/Transforms/Secretize/Passes.h"
 #include "lib/Transforms/ShrinkLutConstants/ShrinkLutConstants.h"
 #include "lib/Transforms/StraightLineVectorizer/StraightLineVectorizer.h"
+#include "lib/Transforms/TensorToScalars/TensorToScalars.h"
 #include "lib/Transforms/UnrollSecretLoops/UnrollSecretLoops.h"
 #include "lib/Transforms/UnusedMemRef/UnusedMemRef.h"
+#include "lib/Transforms/ValidateNoise/ValidateNoise.h"
+#include "lib/Utils/Tablegen/AsmInterfaces.h"
+#include "llvm/include/llvm/Support/CommandLine.h"  // from @llvm-project
+#include "llvm/include/llvm/Support/raw_ostream.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/AffineToStandard/AffineToStandard.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/ArithToLLVM/ArithToLLVM.h"  // from @llvm-project
-#include "mlir/include/mlir/Conversion/BufferizationToMemRef/BufferizationToMemRef.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/ComplexToLLVM/ComplexToLLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/ConvertToLLVM/ToLLVMPass.h"  // from @llvm-project
@@ -82,24 +110,20 @@
 #include "mlir/include/mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"  // from @llvm-project
-#include "mlir/include/mlir/Conversion/TensorToLinalg/TensorToLinalgPass.h"  // from @llvm-project
-#include "mlir/include/mlir/Conversion/TosaToArith/TosaToArith.h"  // from @llvm-project
-#include "mlir/include/mlir/Conversion/TosaToLinalg/TosaToLinalg.h"  // from @llvm-project
-#include "mlir/include/mlir/Conversion/TosaToTensor/TosaToTensor.h"  // from @llvm-project
 #include "mlir/include/mlir/Conversion/UBToLLVM/UBToLLVM.h"  // from @llvm-project
+#include "mlir/include/mlir/Conversion/VectorToLLVM/ConvertVectorToLLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Affine/Passes.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/Transforms/BufferDeallocationOpInterfaceImpl.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Arith/Transforms/Passes.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Bufferization/IR/Bufferization.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Bufferization/Transforms/Passes.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/ControlFlow/Transforms/BufferizableOpInterfaceImpl.h"  // from @llvm-project
+#include "mlir/include/mlir/Dialect/EmitC/IR/EmitC.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/Extensions/AllExtensions.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Func/Transforms/Passes.h"  // from @llvm-project
+#include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"     // from @llvm-project
 #include "mlir/include/mlir/Dialect/LLVMIR/LLVMDialect.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Linalg/IR/Linalg.h"    // from @llvm-project
 #include "mlir/include/mlir/Dialect/Linalg/Passes.h"       // from @llvm-project
@@ -107,512 +131,59 @@
 #include "mlir/include/mlir/Dialect/Math/IR/Math.h"      // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/Transforms/Passes.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Polynomial/IR/PolynomialDialect.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/SCF/IR/SCF.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"  // from @llvm-project
-#include "mlir/include/mlir/Dialect/Tensor/Transforms/Passes.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Tosa/IR/TosaOps.h"     // from @llvm-project
+#include "mlir/include/mlir/IR/OpImplementation.h"         // from @llvm-project
+#include "mlir/include/mlir/IR/Region.h"                   // from @llvm-project
 #include "mlir/include/mlir/Pass/PassManager.h"            // from @llvm-project
-#include "mlir/include/mlir/Pass/PassOptions.h"            // from @llvm-project
 #include "mlir/include/mlir/Pass/PassRegistry.h"           // from @llvm-project
+#include "mlir/include/mlir/Support/LLVM.h"                // from @llvm-project
 #include "mlir/include/mlir/Tools/mlir-opt/MlirOptMain.h"  // from @llvm-project
 #include "mlir/include/mlir/Transforms/Passes.h"           // from @llvm-project
-#include "llvm/include/llvm/Support/CommandLine.h"  // from @llvm-project
-#include "llvm/include/llvm/Support/raw_ostream.h"  // from @llvm-project
 
 #ifndef HEIR_NO_YOSYS
+#include "lib/Pipelines/BooleanPipelineRegistration.h"
 #include "lib/Transforms/YosysOptimizer/YosysOptimizer.h"
 #endif
+
+// This comment includes internal conversions
+// This comment includes internal dialects
+// This comment includes internal pipelines
 
 using namespace mlir;
 using namespace tosa;
 using namespace heir;
-using mlir::func::FuncOp;
 
-static std::vector<std::string> opsToDistribute = {
-    "affine.for",   "affine.load",       "memref.load",    "memref.store",
-    "affine.store", "memref.get_global", "memref.dealloc", "memref.alloc"};
-static std::vector<unsigned> bitWidths = {1, 2, 4, 8, 16};
-
-void tosaToLinalg(OpPassManager &manager) {
-  manager.addNestedPass<FuncOp>(createTosaToLinalgNamed());
-  manager.addNestedPass<FuncOp>(createTosaToLinalg());
-  manager.addNestedPass<FuncOp>(createTosaToArith(true, false));
-  manager.addNestedPass<FuncOp>(createTosaToTensor());
-  manager.addPass(bufferization::createEmptyTensorToAllocTensorPass());
-  manager.addNestedPass<FuncOp>(createLinalgDetensorizePass());
-  manager.addPass(createConvertTensorToLinalgPass());
-  manager.addPass(bufferization::createEmptyTensorToAllocTensorPass());
-}
-
-void oneShotBufferize(OpPassManager &manager) {
-  // One-shot bufferize, from
-  // https://mlir.llvm.org/docs/Bufferization/#ownership-based-buffer-deallocation
-  bufferization::OneShotBufferizationOptions bufferizationOptions;
-  bufferizationOptions.bufferizeFunctionBoundaries = true;
-  manager.addPass(
-      bufferization::createOneShotBufferizePass(bufferizationOptions));
-  manager.addPass(memref::createExpandReallocPass());
-  manager.addPass(bufferization::createOwnershipBasedBufferDeallocationPass());
-  manager.addPass(createCanonicalizerPass());
-  manager.addPass(bufferization::createBufferDeallocationSimplificationPass());
-  manager.addPass(bufferization::createLowerDeallocationsPass());
-  manager.addPass(createCSEPass());
-  manager.addPass(createCanonicalizerPass());
-}
-
-void tosaPipelineBuilder(OpPassManager &manager) {
-  // TOSA to linalg
-  tosaToLinalg(manager);
-  // Bufferize
-  oneShotBufferize(manager);
-  // Affine
-  manager.addNestedPass<FuncOp>(createConvertLinalgToAffineLoopsPass());
-  manager.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
-  manager.addNestedPass<FuncOp>(affine::createAffineExpandIndexOpsPass());
-  manager.addNestedPass<FuncOp>(memref::createExpandOpsPass());
-  manager.addNestedPass<FuncOp>(affine::createSimplifyAffineStructuresPass());
-  manager.addPass(memref::createFoldMemRefAliasOpsPass());
-  manager.addPass(createExpandCopyPass());
-  manager.addPass(createExtractLoopBodyPass());
-  manager.addPass(createUnrollAndForwardPass());
-  // Cleanup
-  manager.addPass(createMemrefGlobalReplacePass());
-  arith::ArithIntNarrowingOptions options;
-  options.bitwidthsSupported = {4, 8, 16};
-  manager.addPass(arith::createArithIntNarrowing(options));
-  manager.addPass(createCanonicalizerPass());
-  manager.addPass(createSCCPPass());
-  manager.addPass(createCSEPass());
-  manager.addPass(createSymbolDCEPass());
-}
-
-void polynomialToLLVMPipelineBuilder(OpPassManager &manager) {
-  // Poly
-  manager.addPass(createElementwiseToAffine());
-  manager.addPass(::mlir::heir::polynomial::createPolynomialToStandard());
-  manager.addPass(createCanonicalizerPass());
-
-  // Linalg
-  manager.addNestedPass<FuncOp>(createConvertElementwiseToLinalgPass());
-  // Needed to lower affine.map and affine.apply
-  manager.addNestedPass<FuncOp>(affine::createAffineExpandIndexOpsPass());
-  manager.addNestedPass<FuncOp>(affine::createSimplifyAffineStructuresPass());
-  manager.addPass(createLowerAffinePass());
-  manager.addNestedPass<FuncOp>(memref::createExpandOpsPass());
-  manager.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
-
-  // Bufferize
-  oneShotBufferize(manager);
-
-  // Linalg must be bufferized before it can be lowered
-  // But lowering to loops also re-introduces affine.apply, so re-lower that
-  manager.addNestedPass<FuncOp>(createConvertLinalgToLoopsPass());
-  manager.addPass(createLowerAffinePass());
-  manager.addPass(createBufferizationToMemRefPass());
-
-  // Cleanup
-  manager.addPass(createCanonicalizerPass());
-  manager.addPass(createSCCPPass());
-  manager.addPass(createCSEPass());
-  manager.addPass(createSymbolDCEPass());
-
-  // ToLLVM
-  manager.addPass(arith::createArithExpandOpsPass());
-  manager.addPass(createConvertSCFToCFPass());
-  manager.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
-  manager.addPass(createConvertToLLVMPass());
-
-  // Cleanup
-  manager.addPass(createCanonicalizerPass());
-  manager.addPass(createSCCPPass());
-  manager.addPass(createCSEPass());
-  manager.addPass(createSymbolDCEPass());
-}
-
-void heirSIMDVectorizerPipelineBuilder(OpPassManager &manager) {
-  // For now we unroll loops to enable insert-rotate, but we would like to be
-  // smarter about this and do an affine loop analysis.
-  // TODO(#589): avoid unrolling loops
-  manager.addPass(createFullLoopUnroll());
-
-  // These two passes are required in this position for a relatively nuanced
-  // reason. insert-rotate doesn't have general match support. In particular,
-  // if a tensor extract from a secret is combined with a tensor extract from a
-  // constant 2D tensor (e.g., the weight matrix of a convolution), then
-  // insert-rotate won't be able to tell the difference and understand that the
-  // extracted value from the 2D tensor should be splatted.
-  //
-  // Canonicalize supports folding these away, but is too slow to run on the
-  // unrolled loop. Instead, this "empty" pass uses the greedy rewrite engine
-  // to apply folding patterns, including for tensor.extract, which converts a
-  // constant weight matrix into the underlying arith.constant values, which
-  // are supported as a splattable non-tensor input in insert-rotate. Then the
-  // canonicalize pass can be run efficiently to achieve the same effect as if
-  // the canonicalize pass were run alone.
-  manager.addPass(createApplyFolders());
-  manager.addPass(createCanonicalizerPass());
-
-  // Insert rotations aligned to slot targets. Future work should provide
-  // alternative methods to optimally align rotations, and allow the user to
-  // configure this via pipeline options.
-  manager.addPass(tensor_ext::createInsertRotate());
-  manager.addPass(createCSEPass());
-  manager.addPass(createCanonicalizerPass());
-  manager.addPass(createCSEPass());
-
-  manager.addPass(tensor_ext::createCollapseInsertionChains());
-  manager.addPass(createSCCPPass());
-  manager.addPass(createCanonicalizerPass());
-  manager.addPass(createCSEPass());
-
-  manager.addPass(tensor_ext::createRotateAndReduce());
-  manager.addPass(createSCCPPass());
-  manager.addPass(createCanonicalizerPass());
-  manager.addPass(createCSEPass());
-}
-
-#ifndef HEIR_NO_YOSYS
-struct TosaToBooleanTfheOptions
-    : public PassPipelineOptions<TosaToBooleanTfheOptions> {
-  PassOptions::Option<bool> abcFast{*this, "abc-fast",
-                                    llvm::cl::desc("Run abc in fast mode."),
-                                    llvm::cl::init(false)};
-
-  PassOptions::Option<int> unrollFactor{
-      *this, "unroll-factor",
-      llvm::cl::desc("Unroll loops by a given factor before optimizing. A "
-                     "value of zero (default) prevents unrolling."),
-      llvm::cl::init(0)};
-
-  PassOptions::Option<std::string> entryFunction{
-      *this, "entry-function", llvm::cl::desc("Entry function to secretize"),
-      llvm::cl::init("main")};
-};
-
-void tosaToBooleanTfhePipeline(const std::string &yosysFilesPath,
-                               const std::string &abcPath) {
-  PassPipelineRegistration<TosaToBooleanTfheOptions>(
-      "tosa-to-boolean-tfhe", "Arithmetic modules to boolean tfhe-rs pipeline.",
-      [yosysFilesPath, abcPath](OpPassManager &pm,
-                                const TosaToBooleanTfheOptions &options) {
-        // Secretize inputs
-        pm.addPass(createSecretize(SecretizeOptions{options.entryFunction}));
-
-        // TOSA to linalg
-        tosaToLinalg(pm);
-
-        // Bufferize
-        oneShotBufferize(pm);
-
-        // Affine
-        pm.addNestedPass<FuncOp>(createConvertLinalgToAffineLoopsPass());
-        pm.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
-        pm.addNestedPass<FuncOp>(affine::createAffineExpandIndexOpsPass());
-        pm.addNestedPass<FuncOp>(memref::createExpandOpsPass());
-        pm.addNestedPass<FuncOp>(affine::createSimplifyAffineStructuresPass());
-        pm.addNestedPass<FuncOp>(affine::createAffineLoopNormalizePass(true));
-        pm.addPass(memref::createFoldMemRefAliasOpsPass());
-        pm.addPass(createExpandCopyPass());
-
-        // Cleanup
-        pm.addPass(createMemrefGlobalReplacePass());
-        arith::ArithIntNarrowingOptions arithOps;
-        arithOps.bitwidthsSupported = {4, 8, 16};
-        pm.addPass(arith::createArithIntNarrowing(arithOps));
-        pm.addPass(createCanonicalizerPass());
-        pm.addPass(createSCCPPass());
-        pm.addPass(createCSEPass());
-        pm.addPass(createSymbolDCEPass());
-
-        // Wrap with secret.generic and then distribute-generic.
-        pm.addPass(createWrapGeneric());
-        auto distributeOpts = secret::SecretDistributeGenericOptions{
-            .opsToDistribute = opsToDistribute};
-        pm.addPass(secret::createSecretDistributeGeneric(distributeOpts));
-        pm.addPass(createCanonicalizerPass());
-
-        // Booleanize and Yosys Optimize
-        pm.addPass(createYosysOptimizer(yosysFilesPath, abcPath,
-                                        options.abcFast, options.unrollFactor));
-
-        // Lower combinational circuit to CGGI
-        pm.addPass(createCanonicalizerPass());
-        pm.addPass(createSCCPPass());
-
-        pm.addPass(mlir::createCSEPass());
-        pm.addPass(secret::createSecretDistributeGeneric());
-        pm.addPass(comb::createCombToCGGI());
-
-        // CGGI to Tfhe-Rust exit dialect
-        pm.addPass(createCGGIToTfheRust());
-        // CSE must be run before canonicalizer, so that redundant ops are
-        // cleared before the canonicalizer hoists TfheRust ops.
-        pm.addPass(createCSEPass());
-        pm.addPass(createCanonicalizerPass());
-
-        // Cleanup loads and stores
-        pm.addPass(createExpandCopyPass(
-            ExpandCopyPassOptions{.disableAffineLoop = true}));
-        pm.addPass(memref::createFoldMemRefAliasOpsPass());
-        pm.addPass(createForwardStoreToLoad());
-        pm.addPass(createCanonicalizerPass());
-        pm.addPass(createCSEPass());
-        pm.addPass(createSCCPPass());
-      });
-}
-
-struct TosaToBooleanFpgaTfheOptions
-    : public PassPipelineOptions<TosaToBooleanFpgaTfheOptions> {
-  PassOptions::Option<bool> abcFast{*this, "abc-fast",
-                                    llvm::cl::desc("Run abc in fast mode."),
-                                    llvm::cl::init(false)};
-
-  PassOptions::Option<int> unrollFactor{
-      *this, "unroll-factor",
-      llvm::cl::desc("Unroll loops by a given factor before optimizing. A "
-                     "value of zero (default) prevents unrolling."),
-      llvm::cl::init(0)};
-
-  PassOptions::Option<std::string> entryFunction{
-      *this, "entry-function", llvm::cl::desc("Entry function to secretize"),
-      llvm::cl::init("main")};
-};
-
-void tosaToBooleanFpgaTfhePipeline(const std::string &yosysFilesPath,
-                                   const std::string &abcPath) {
-  PassPipelineRegistration<TosaToBooleanFpgaTfheOptions>(
-      "tosa-to-boolean-fpga-tfhe",
-      "Arithmetic modules to boolean tfhe-rs for FPGA backend pipeline.",
-      [yosysFilesPath, abcPath](OpPassManager &pm,
-                                const TosaToBooleanFpgaTfheOptions &options) {
-        // Secretize inputs
-        pm.addPass(createSecretize(SecretizeOptions{options.entryFunction}));
-
-        // TOSA to linalg
-        tosaToLinalg(pm);
-
-        // Bufferize
-        oneShotBufferize(pm);
-
-        // Affine
-        pm.addNestedPass<FuncOp>(createConvertLinalgToAffineLoopsPass());
-        pm.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
-        pm.addNestedPass<FuncOp>(affine::createAffineExpandIndexOpsPass());
-        pm.addNestedPass<FuncOp>(memref::createExpandOpsPass());
-        pm.addNestedPass<FuncOp>(affine::createSimplifyAffineStructuresPass());
-        pm.addPass(memref::createFoldMemRefAliasOpsPass());
-        pm.addPass(createExpandCopyPass());
-        pm.addNestedPass<FuncOp>(affine::createAffineLoopNormalizePass(true));
-        pm.addNestedPass<FuncOp>(affine::createLoopFusionPass(
-            0, 0, true, affine::FusionMode::Greedy));
-        pm.addPass(affine::createAffineScalarReplacementPass());
-        pm.addPass(createForwardStoreToLoad());
-
-        // Cleanup
-        pm.addPass(createMemrefGlobalReplacePass());
-        arith::ArithIntNarrowingOptions arithOps;
-        arithOps.bitwidthsSupported = {4, 8, 16};
-        pm.addPass(arith::createArithIntNarrowing(arithOps));
-        pm.addPass(createCanonicalizerPass());
-        pm.addPass(createSCCPPass());
-        pm.addPass(createCSEPass());
-        pm.addPass(createSymbolDCEPass());
-
-        pm.addPass(createWrapGeneric());
-        auto distributeOpts = secret::SecretDistributeGenericOptions{
-            .opsToDistribute = opsToDistribute};
-        pm.addPass(secret::createSecretDistributeGeneric(distributeOpts));
-        pm.addPass(createCanonicalizerPass());
-
-        // Booleanize and Yosys Optimize
-        pm.addPass(createYosysOptimizer(yosysFilesPath, abcPath,
-                                        options.abcFast, options.unrollFactor,
-                                        Mode::Boolean));
-
-        // Lower combinational circuit to CGGI
-        pm.addPass(createForwardStoreToLoad());
-        pm.addPass(mlir::createCSEPass());
-        pm.addPass(secret::createSecretDistributeGeneric());
-        pm.addPass(comb::createCombToCGGI());
-        // Cleanup CombToCGGI
-        pm.addPass(createExpandCopyPass(
-            ExpandCopyPassOptions{.disableAffineLoop = true}));
-        pm.addPass(memref::createFoldMemRefAliasOpsPass());
-        pm.addPass(createForwardStoreToLoad());
-        pm.addPass(createRemoveUnusedMemRef());
-
-        pm.addPass(createStraightLineVectorizer(
-            StraightLineVectorizerOptions{.dialect = "cggi"}));
-        pm.addPass(createCanonicalizerPass());
-        pm.addPass(createCSEPass());
-        pm.addPass(createSCCPPass());
-
-        // CGGI to Tfhe-Rust exit dialect
-        pm.addPass(createCGGIToTfheRustBool());
-        pm.addPass(createCanonicalizerPass());
-        pm.addPass(createCSEPass());
-        pm.addPass(createSCCPPass());
-
-        pm.addPass(createMergeLUTs());
-        pm.addPass(createShrinkLutConstants());
-        pm.addPass(mlir::heir::cggi::createCGGICanonicalizeToLuts());
-
-      });
-}
-
-struct TosaToJaxiteOptions : public PassPipelineOptions<TosaToJaxiteOptions> {
-  PassOptions::Option<bool> abcFast{*this, "abc-fast",
-                                    llvm::cl::desc("Run abc in fast mode."),
-                                    llvm::cl::init(false)};
-
-  PassOptions::Option<int> unrollFactor{
-      *this, "unroll-factor",
-      llvm::cl::desc("Unroll loops by a given factor before optimizing. A "
-                     "value of zero (default) prevents unrolling."),
-      llvm::cl::init(0)};
-
-  PassOptions::Option<std::string> entryFunction{
-      *this, "entry-function", llvm::cl::desc("Entry function to secretize"),
-      llvm::cl::init("main")};
-};
-
-void tosaToJaxitePipeline(const std::string &yosysFilesPath,
-                          const std::string &abcPath) {
-  PassPipelineRegistration<TosaToJaxiteOptions>(
-      "tosa-to-boolean-jaxite", "Arithmetic modules to jaxite pipeline.",
-      [yosysFilesPath, abcPath](OpPassManager &pm,
-                                const TosaToJaxiteOptions &options) {
-        // Secretize inputs
-        pm.addPass(createSecretize(SecretizeOptions{options.entryFunction}));
-
-        // TOSA to linalg
-        tosaToLinalg(pm);
-
-        // Bufferize
-        oneShotBufferize(pm);
-
-        // Affine
-        pm.addNestedPass<FuncOp>(createConvertLinalgToAffineLoopsPass());
-        pm.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
-        pm.addNestedPass<FuncOp>(affine::createAffineExpandIndexOpsPass());
-        pm.addNestedPass<FuncOp>(memref::createExpandOpsPass());
-        pm.addNestedPass<FuncOp>(affine::createSimplifyAffineStructuresPass());
-        pm.addNestedPass<FuncOp>(affine::createAffineLoopNormalizePass(true));
-        pm.addPass(memref::createFoldMemRefAliasOpsPass());
-        pm.addPass(createExpandCopyPass());
-        pm.addNestedPass<FuncOp>(affine::createAffineLoopNormalizePass(true));
-        pm.addNestedPass<FuncOp>(affine::createLoopFusionPass(
-            0, 0, true, affine::FusionMode::Greedy));
-        pm.addPass(affine::createAffineScalarReplacementPass());
-        pm.addPass(createForwardStoreToLoad());
-
-        // Cleanup
-        pm.addPass(createMemrefGlobalReplacePass());
-        arith::ArithIntNarrowingOptions arithOps;
-        arithOps.bitwidthsSupported = bitWidths;
-        pm.addPass(arith::createArithIntNarrowing(arithOps));
-        pm.addPass(createCanonicalizerPass());
-        pm.addPass(createSCCPPass());
-        pm.addPass(createCSEPass());
-        pm.addPass(createSymbolDCEPass());
-        pm.addPass(affine::createAffineScalarReplacementPass());
-
-        // Wrap with secret.generic and then distribute-generic.
-        pm.addPass(createWrapGeneric());
-        auto distributeOpts = secret::SecretDistributeGenericOptions{
-            .opsToDistribute = opsToDistribute};
-        pm.addPass(secret::createSecretDistributeGeneric(distributeOpts));
-        pm.addPass(createCanonicalizerPass());
-        // Booleanize and Yosys Optimize
-        pm.addPass(createYosysOptimizer(yosysFilesPath, abcPath,
-                                        options.abcFast, options.unrollFactor));
-
-        // Lower combinational circuit to CGGI
-        pm.addPass(createCanonicalizerPass());
-        pm.addPass(createSCCPPass());
-
-        pm.addPass(mlir::createCSEPass());
-        pm.addPass(secret::createSecretDistributeGeneric());
-        pm.addPass(comb::createCombToCGGI());
-
-        // CGGI to Jaxite exit dialect
-        pm.addPass(createCGGIToJaxite());
-        // CSE must be run before canonicalizer, so that redundant ops are
-        // cleared before the canonicalizer hoists TfheRust ops.
-        pm.addPass(createCSEPass());
-        pm.addPass(createCanonicalizerPass());
-
-        // Cleanup loads and stores
-        pm.addPass(createExpandCopyPass(
-            ExpandCopyPassOptions{.disableAffineLoop = true}));
-        pm.addPass(memref::createFoldMemRefAliasOpsPass());
-        pm.addPass(createForwardStoreToLoad());
-        pm.addPass(createCanonicalizerPass());
-        pm.addPass(createCSEPass());
-        pm.addPass(createSCCPPass());
-      });
-}
-#endif
-
-struct MlirToBgvPipelineOptions
-    : public PassPipelineOptions<MlirToBgvPipelineOptions> {
-  PassOptions::Option<std::string> entryFunction{
-      *this, "entry-function", llvm::cl::desc("Entry function to secretize"),
-      llvm::cl::init("main")};
-  PassOptions::Option<int> ciphertextDegree{
-      *this, "ciphertext-degree",
-      llvm::cl::desc("The degree of the polynomials to use for ciphertexts; "
-                     "equivalently, the number of messages that can be packed "
-                     "into a single ciphertext."),
-      llvm::cl::init(1024)};
-};
-
-void mlirToBgvPipelineBuilder(OpPassManager &pm,
-                              const MlirToBgvPipelineOptions &options) {
-  // Secretize inputs
-  pm.addPass(createSecretize(SecretizeOptions{options.entryFunction}));
-  pm.addPass(createWrapGeneric());
-  pm.addPass(createCanonicalizerPass());
-  pm.addPass(createCSEPass());
-
-  // Vectorize and optimize rotations
-  heirSIMDVectorizerPipelineBuilder(pm);
-
-  // Prepare to lower to BGV
-  pm.addPass(secret::createSecretDistributeGeneric());
-  pm.addPass(createCanonicalizerPass());
-
-  // Lower to BGV
-  auto secretToBgvOpts = SecretToBGVOptions{};
-  secretToBgvOpts.polyModDegree = options.ciphertextDegree;
-  pm.addPass(createSecretToBGV(secretToBgvOpts));
-}
-
-void mlirToOpenFheBgvPipelineBuilder(OpPassManager &pm,
-                                     const MlirToBgvPipelineOptions &options) {
-  // lower to BGV
-  mlirToBgvPipelineBuilder(pm, options);
-
-  // Add client interface
-  auto addClientInterfaceOptions = lwe::AddClientInterfaceOptions{};
-  // OpenFHE's pke API, which this pipeline generates, is always public-key
-  addClientInterfaceOptions.usePublicKey = true;
-  addClientInterfaceOptions.oneValuePerHelperFn = true;
-  pm.addPass(lwe::createAddClientInterface(addClientInterfaceOptions));
-
-  // Lower to openfhe
-  pm.addPass(bgv::createBGVToOpenfhe());
-  pm.addPass(createCanonicalizerPass());
-  auto configureCryptoContextOptions = openfhe::ConfigureCryptoContextOptions{};
-  configureCryptoContextOptions.entryFunction = options.entryFunction;
-  pm.addPass(
-      openfhe::createConfigureCryptoContext(configureCryptoContextOptions));
+// hack here: another template specialization for FuncOp
+// expect linker to pick this one
+//
+// This is really unsafe as it depends on ::mlir::detail,
+// which is not a expected behavior. However, the current
+// OpAsmOpInterface declaration in MLIR already has a default implementation
+// so we can not provide another implementation for it (MLIR does not
+// support it)
+//
+// for detail, check #1219
+template <>
+void ::mlir::detail::OpAsmOpInterfaceInterfaceTraits::
+    Model<mlir::func::FuncOp>::getAsmBlockArgumentNames(
+        mlir::detail::OpAsmOpInterfaceInterfaceTraits::Concept const *,
+        mlir::Operation *op, mlir::Region &region,
+        ::mlir::OpAsmSetValueNameFn setNameFn) {
+  for (auto &block : region) {
+    for (auto arg : block.getArguments()) {
+      if (auto ty = dyn_cast<TypeAsmInterface>(arg.getType()))
+        setNameFn(arg, ty.suggestedName());
+    }
+  }
 }
 
 int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
+
+  // This comment inserts internal dialects
 
   registry.insert<mod_arith::ModArithDialect>();
   registry.insert<bgv::BGVDialect>();
@@ -620,7 +191,9 @@ int main(int argc, char **argv) {
   registry.insert<cggi::CGGIDialect>();
   registry.insert<comb::CombDialect>();
   registry.insert<jaxite::JaxiteDialect>();
+  registry.insert<lattigo::LattigoDialect>();
   registry.insert<lwe::LWEDialect>();
+  registry.insert<mgmt::MgmtDialect>();
   registry.insert<random::RandomDialect>();
   registry.insert<openfhe::OpenfheDialect>();
   registry.insert<rns::RNSDialect>();
@@ -631,15 +204,16 @@ int main(int argc, char **argv) {
 
   // Add expected MLIR dialects to the registry.
   registry.insert<LLVM::LLVMDialect>();
+  registry.insert<::mlir::emitc::EmitCDialect>();
   registry.insert<::mlir::linalg::LinalgDialect>();
   registry.insert<TosaDialect>();
   registry.insert<affine::AffineDialect>();
-  registry.insert<arith::ArithDialect>();
+  registry.insert<mlir::arith::ArithDialect>();
   registry.insert<bufferization::BufferizationDialect>();
   registry.insert<func::FuncDialect>();
   registry.insert<math::MathDialect>();
   registry.insert<memref::MemRefDialect>();
-  registry.insert<::mlir::polynomial::PolynomialDialect>();
+  registry.insert<::mlir::heir::polynomial::PolynomialDialect>();
   registry.insert<scf::SCFDialect>();
   registry.insert<tensor::TensorDialect>();
 
@@ -650,7 +224,7 @@ int main(int argc, char **argv) {
 
   // Upstream passes used by HEIR
   // Converting to LLVM
-  arith::registerConvertArithToLLVMInterface(registry);
+  mlir::arith::registerConvertArithToLLVMInterface(registry);
   cf::registerConvertControlFlowToLLVMInterface(registry);
   func::registerAllExtensions(registry);
   index::registerConvertIndexToLLVMInterface(registry);
@@ -659,10 +233,12 @@ int main(int argc, char **argv) {
   registerConvertMathToLLVMInterface(registry);
   registerConvertMemRefToLLVMInterface(registry);
   ub::registerConvertUBToLLVMInterface(registry);
+  vector::registerConvertVectorToLLVMInterface(registry);
 
   // Misc
   registerTransformsPasses();      // canonicalize, cse, etc.
   affine::registerAffinePasses();  // loop unrolling
+  registerLinalgPasses();          // linalg to loops
 
   // These are only needed by two tests that build a pass pipeline
   // from the CLI. Those tests can probably eventually be removed.
@@ -677,7 +253,7 @@ int main(int argc, char **argv) {
   registerPass(
       []() -> std::unique_ptr<Pass> { return createConvertFuncToLLVMPass(); });
   registerPass(
-      []() -> std::unique_ptr<Pass> { return createConvertSCFToCFPass(); });
+      []() -> std::unique_ptr<Pass> { return createSCFToControlFlowPass(); });
   registerPass([]() -> std::unique_ptr<Pass> {
     return createFinalizeMemRefToLLVMConversionPass();
   });
@@ -686,39 +262,48 @@ int main(int argc, char **argv) {
   registerPass([]() -> std::unique_ptr<Pass> {
     return createReconcileUnrealizedCastsPass();
   });
+  registerPass(
+      []() -> std::unique_ptr<Pass> { return createConvertToLLVMPass(); });
 
   // Bufferization and external models
   bufferization::registerBufferizationPasses();
-  arith::registerBufferizableOpInterfaceExternalModels(registry);
-  arith::registerBufferDeallocationOpInterfaceExternalModels(registry);
+  mlir::arith::registerBufferizableOpInterfaceExternalModels(registry);
+  mlir::arith::registerBufferDeallocationOpInterfaceExternalModels(registry);
   bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
       registry);
   cf::registerBufferizableOpInterfaceExternalModels(registry);
   mlir::linalg::registerBufferizableOpInterfaceExternalModels(registry);
   scf::registerBufferizableOpInterfaceExternalModels(registry);
   tensor::registerBufferizableOpInterfaceExternalModels(registry);
+  mlir::arith::registerConvertArithToLLVMInterface(registry);
 
   // Custom passes in HEIR
   cggi::registerCGGIPasses();
+  lattigo::registerLattigoPasses();
   lwe::registerLWEPasses();
+  mgmt::registerMgmtPasses();
+  openfhe::registerOpenfhePasses();
   ::mlir::heir::polynomial::registerPolynomialPasses();
   secret::registerSecretPasses();
-  
+
   tensor_ext::registerTensorExtPasses();
-  openfhe::registerOpenfhePasses();
   registerElementwiseToAffinePasses();
   registerSecretizePasses();
+  registerSecretInsertMgmtPasses();
   registerFullLoopUnrollPasses();
   registerConvertIfToSelectPasses();
   registerConvertSecretForToStaticForPasses();
   registerConvertSecretWhileToStaticForPasses();
   registerConvertSecretExtractToStaticExtractPasses();
   registerConvertSecretInsertToStaticInsertPasses();
+  registerDropUnitDims();
+  registerAnnotateSecretnessPasses();
   registerApplyFoldersPasses();
+  registerForwardInsertToExtractPasses();
   registerForwardStoreToLoadPasses();
   registerOperationBalancerPasses();
   registerStraightLineVectorizerPasses();
-  
+
   registerUnusedMemRefPasses();
   registerMergeLUTsPasses();
   registerShrinkLutConstantsPasses();
@@ -726,7 +311,11 @@ int main(int argc, char **argv) {
   mlir::heir::cggi::registerCGGICanonicalizeToLutsPass();
   // comb::registerGateToLut();
 
+  registerValidateNoisePasses();
+  registerOptimizeRelinearizationPasses();
+  registerLayoutPropagationPasses();
   registerLinalgCanonicalizationsPasses();
+  registerTensorToScalarsPasses();
   // Register yosys optimizer pipeline if configured.
 #ifndef HEIR_NO_YOSYS
 #ifndef HEIR_ABC_BINARY
@@ -747,61 +336,101 @@ int main(int argc, char **argv) {
   if (overriddenYosysRunfilesEnvPath != nullptr)
     yosysRunfilesEnvPath = overriddenYosysRunfilesEnvPath;
   mlir::heir::registerYosysOptimizerPipeline(yosysRunfilesEnvPath, abcEnvPath);
-  tosaToBooleanTfhePipeline(yosysRunfilesEnvPath, abcEnvPath);
-  tosaToBooleanFpgaTfhePipeline(yosysRunfilesEnvPath, abcEnvPath);
-  tosaToJaxitePipeline(yosysRunfilesEnvPath, abcEnvPath);
+  registerTosaToBooleanTfhePipeline(yosysRunfilesEnvPath, abcEnvPath);
+  registerTosaToBooleanFpgaTfhePipeline(yosysRunfilesEnvPath, abcEnvPath);
+  registerTosaToJaxitePipeline(yosysRunfilesEnvPath, abcEnvPath);
+  // Register internal pipeline
 #endif
 
   // Dialect conversion passes in HEIR
   mod_arith::registerModArithToArithPasses();
+  mlir::heir::arith::registerArithToModArithPasses();
+  mlir::heir::arith::registerArithToCGGIPasses();
+  mlir::heir::arith::registerArithToCGGIQuartPasses();
+  mod_arith::registerConvertToMacPass();
   bgv::registerBGVToLWEPasses();
-  bgv::registerBGVToOpenfhePasses();
-  ckks::registerCKKSToOpenfhePasses();
-  comb::registerCombToCGGIPasses();
+  ckks::registerCKKSToLWEPasses();
+  registerSecretToCGGIPasses();
+  lwe::registerLWEToLattigoPasses();
+  lwe::registerLWEToOpenfhePasses();
   lwe::registerLWEToPolynomialPasses();
   ::mlir::heir::linalg::registerLinalgToTensorExtPasses();
-  ::mlir::heir::polynomial::registerPolynomialToStandardPasses();
+  ::mlir::heir::polynomial::registerPolynomialToModArithPasses();
   registerCGGIToJaxitePasses();
   registerCGGIToTfheRustPasses();
   registerCGGIToTfheRustBoolPasses();
   registerCGGIToOpenfhePasses();
+  // This comement registers internal passes
   registerSecretToBGVPasses();
   registerSecretToCKKSPasses();
-  mlir::heir::tosa::registerTosaToSecretArithPasses();
+  ::mlir::heir::tosa::registerTosaToSecretArithPasses();
 
   // Interfaces in HEIR
   secret::registerBufferizableOpInterfaceExternalModels(registry);
   rns::registerExternalRNSTypeInterfaces(registry);
 
-  PassPipelineRegistration<>("heir-tosa-to-arith",
-                             "Run passes to lower TOSA models with stripped "
-                             "quant types to arithmetic",
-                             tosaPipelineBuilder);
+  PassPipelineRegistration<TosaToArithTfheOptions>(
+      "heir-tosa-to-arith",
+      "Run passes to lower TOSA models with stripped "
+      "quant types to arithmetic",
+      [](OpPassManager &pm, const TosaToArithTfheOptions &options) {
+        ::mlir::heir::tosaPipelineBuilder(pm, options.unroll);
+      });
 
   PassPipelineRegistration<>(
       "heir-polynomial-to-llvm",
       "Run passes to lower the polynomial dialect to LLVM",
-      polynomialToLLVMPipelineBuilder);
+      ::mlir::heir::polynomialToLLVMPipelineBuilder);
 
-  PassPipelineRegistration<>(
+  PassPipelineRegistration<>("heir-basic-mlir-to-llvm",
+                             "Lower basic MLIR to LLVM",
+                             ::mlir::heir::basicMLIRToLLVMPipelineBuilder);
+
+  PassPipelineRegistration<SimdVectorizerOptions>(
       "heir-simd-vectorizer",
       "Run scheme-agnostic passes to convert FHE programs that operate on "
       "scalar types to equivalent programs that operate on vectors and use "
       "tensor_ext.rotate",
-      heirSIMDVectorizerPipelineBuilder);
+      [](OpPassManager &pm, const SimdVectorizerOptions &options) {
+        ::mlir::heir::heirSIMDVectorizerPipelineBuilder(
+            pm, options.experimentalDisableLoopUnroll);
+      });
 
-  PassPipelineRegistration<MlirToBgvPipelineOptions>(
+  PassPipelineRegistration<mlir::heir::MlirToRLWEPipelineOptions>(
+      "mlir-to-secret-arithmetic",
+      "Convert a func using standard MLIR dialects to secret dialect with "
+      "arithmetic ops",
+      [](OpPassManager &pm,
+         const mlir::heir::MlirToRLWEPipelineOptions &options) {
+        mlirToSecretArithmeticPipelineBuilder(pm, options);
+      });
+
+  PassPipelineRegistration<mlir::heir::MlirToRLWEPipelineOptions>(
       "mlir-to-bgv",
       "Convert a func using standard MLIR dialects to FHE using "
       "BGV.",
-      mlirToBgvPipelineBuilder);
+      mlirToRLWEPipelineBuilder(mlir::heir::RLWEScheme::bgvScheme));
 
-  PassPipelineRegistration<MlirToBgvPipelineOptions>(
-      "mlir-to-openfhe-bgv",
-      "Convert a func using standard MLIR dialects to FHE using BGV and "
-      "export "
-      "to OpenFHE C++ code.",
-      mlirToOpenFheBgvPipelineBuilder);
+  PassPipelineRegistration<mlir::heir::MlirToRLWEPipelineOptions>(
+      "mlir-to-ckks",
+      "Convert a func using standard MLIR dialects to FHE using "
+      "CKKS.",
+      mlirToRLWEPipelineBuilder(mlir::heir::RLWEScheme::ckksScheme));
+
+  PassPipelineRegistration<mlir::heir::BackendOptions>(
+      "scheme-to-openfhe",
+      "Convert code expressed at FHE scheme level to OpenFHE C++ code.",
+      toOpenFhePipelineBuilder());
+
+  PassPipelineRegistration<mlir::heir::BackendOptions>(
+      "scheme-to-lattigo",
+      "Convert code expressed at FHE scheme level to Lattigo Go code.",
+      toLattigoPipelineBuilder());
+
+  PassPipelineRegistration<>(
+      "convert-to-data-oblivious",
+      "Transforms a native program to data-oblivious program",
+      convertToDataObliviousPipelineBuilder);
 
   return asMainReturnCode(
       MlirOptMain(argc, argv, "HEIR Pass Driver", registry));

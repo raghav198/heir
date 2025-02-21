@@ -1,7 +1,10 @@
 #ifndef LIB_TARGET_TFHERUST_UTILS_H_
 #define LIB_TARGET_TFHERUST_UTILS_H_
 
+#include <cstdint>
+
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
+#include "mlir/include/mlir/IR/Types.h"                 // from @llvm-project
 #include "mlir/include/mlir/Support/LLVM.h"             // from @llvm-project
 #include "mlir/include/mlir/Support/LogicalResult.h"    // from @llvm-project
 
@@ -13,6 +16,7 @@ namespace tfhe_rust {
 // warning and return success. This is because some functions are left
 // over during compilation.
 ::mlir::LogicalResult canEmitFuncForTfheRust(::mlir::func::FuncOp &funcOp);
+int16_t getTfheRustBitWidth(Type type);
 
 }  // namespace tfhe_rust
 }  // namespace heir

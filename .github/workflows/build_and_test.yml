@@ -13,7 +13,7 @@ concurrency:
 jobs:
   check-cache:
     runs-on:
-      labels: ubuntu-20.04-8core
+      labels: ubuntu-22.04-8core
     outputs:
       runner: ${{ steps.runner.outputs.runner }}
     steps:
@@ -22,13 +22,13 @@ jobs:
 
       - name: Cache bazel build artifacts
         id: cache
-        uses: actions/cache@88522ab9f39a2ea568f7027eddc7d8d8bc9d59c8 # pin@v3.3.1
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # pin@v4.2.0
         with:
           path: |
             ~/.cache/bazel
-          key: ${{ runner.os }}-bazel-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE') }}-${{ hashFiles('bazel/import_llvm.bzl') }}
+          key: ${{ runner.os }}-${{ env.ImageVersion }}-bazel-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE') }}-${{ hashFiles('bazel/import_llvm.bzl') }}
           restore-keys: |
-            ${{ runner.os }}-bazel-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE') }}-
+            ${{ runner.os }}-${{ env.ImageVersion }}-bazel-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE') }}-
           lookup-only: true
       - name: Select runner
         id: runner
@@ -38,9 +38,9 @@ jobs:
           set -euo pipefail
 
           if [[ "${CACHE_HIT}" == "true" ]]; then
-            echo "runner=ubuntu-20.04-8core" >> "$GITHUB_OUTPUT"
+            echo "runner=ubuntu-22.04-8core" >> "$GITHUB_OUTPUT"
           else
-            echo "runner=ubuntu-20.04-16core" >> "$GITHUB_OUTPUT"
+            echo "runner=ubuntu-22.04-32core" >> "$GITHUB_OUTPUT"
           fi
 
   build-and-test:
@@ -50,15 +50,17 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # pin@v3
+        with:
+          key: ${{ runner.os }}-${{ env.ImageVersion }}-bazel-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE') }}-${{ hashFiles('bazel/import_llvm.bzl') }}
 
       - name: Cache bazel build artifacts
-        uses: actions/cache@88522ab9f39a2ea568f7027eddc7d8d8bc9d59c8 # pin@v3.3.1
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # pin@v4.2.0
         with:
           path: |
             ~/.cache/bazel
-          key: ${{ runner.os }}-bazel-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE') }}-${{ hashFiles('bazel/import_llvm.bzl') }}
+          key: ${{ runner.os }}-${{ env.ImageVersion }}-bazel-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE') }}-${{ hashFiles('bazel/import_llvm.bzl') }}
           restore-keys: |
-            ${{ runner.os }}-bazel-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE') }}-
+            ${{ runner.os }}-${{ env.ImageVersion }}-bazel-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE') }}-
 
       # --noincompatible_strict_action_env is used below to inherit the path
       # from the parent process, which is required for the build to be cached
@@ -66,11 +68,11 @@ jobs:
       # requires the `PATH` to find the `cargo` binary.
       - name: "Run `bazel build`"
         run: |
-          bazel build --noincompatible_strict_action_env  -c fastbuild //...
+          bazel build --noincompatible_strict_action_env --//:enable_openmp=0 -c fastbuild //...
 
       - name: "Run `bazel test`"
         run: |
-          bazel test --noincompatible_strict_action_env -c fastbuild //...
+          bazel test --noincompatible_strict_action_env --//:enable_openmp=0 -c fastbuild //...
 
       # Tests specifically for the tfhe-rs codegen
       - name: rustup toolchain install

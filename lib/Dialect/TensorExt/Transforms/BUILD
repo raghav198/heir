@@ -13,6 +13,7 @@ cc_library(
     deps = [
         ":AlignTensorSizes",
         ":CollapseInsertionChains",
+        ":ImplementShiftNetwork",
         ":InsertRotate",
         ":RotateAndReduce",
         ":pass_inc_gen",
@@ -92,13 +93,11 @@ cc_library(
     ],
     deps = [
         ":pass_inc_gen",
-        "@heir//lib/Conversion:Utils",
-        "@heir//lib/Dialect:Utils",
         "@heir//lib/Dialect/Secret/IR:Dialect",
         "@heir//lib/Dialect/TensorExt/IR:Dialect",
+        "@heir//lib/Utils:ConversionUtils",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
-        "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Support",
@@ -106,6 +105,27 @@ cc_library(
         "@llvm-project//mlir:TransformUtils",
     ],
 )
+
+cc_library(
+    name = "ImplementShiftNetwork",
+    srcs = ["ImplementShiftNetwork.cpp"],
+    hdrs = [
+        "ImplementShiftNetwork.h",
+    ],
+    deps = [
+        ":pass_inc_gen",
+        "@heir//lib/Dialect/TensorExt/IR:Dialect",
+        "@heir//lib/Utils:AffineMapUtils",
+        "@heir//lib/Utils/ADT:FrozenVector",
+        "@heir//lib/Utils/Graph",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
 # TensorExt pass tablegen and headers.
 
 gentbl_cc_library(
@@ -142,9 +162,9 @@ gentbl_cc_library(
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "InsertRotate.td",
     deps = [
-        "@heir//lib/DRR",
         "@heir//lib/Dialect/TensorExt/IR:ops_inc_gen",
         "@heir//lib/Dialect/TensorExt/IR:td_files",
+        "@heir//lib/Utils/DRR",
         "@llvm-project//mlir:ArithOpsTdFiles",
         "@llvm-project//mlir:TensorOpsTdFiles",
     ],

@@ -110,7 +110,14 @@ class CLI:
         if not target_dialect_namespace:
             target_dialect_namespace = target_dialect_mnemonic
 
-        lib_path = self.root / "lib" / "Conversion" / pass_name
+        lib_path = (
+            self.root
+            / "lib"
+            / "Dialect"
+            / source_dialect_name
+            / "Conversions"
+            / pass_name
+        )
 
         if not force and os.path.isdir(lib_path):
             raise ValueError(f"Conversion pass directories already exist at {lib_path}")
@@ -303,9 +310,8 @@ class CLI:
                     / "Attributes.h.jinja": lib_path
                     / f"{dialect_name}Attributes.h",
                     templ_lib
-                    / "Attributes.td.jinja": (
-                        lib_path / f"{dialect_name}Attributes.td"
-                    ),
+                    / "Attributes.td.jinja": lib_path
+                    / f"{dialect_name}Attributes.td",
                     templ_lib
                     / "Attributes.cpp.jinja": lib_path
                     / f"{dialect_name}Attributes.cpp",

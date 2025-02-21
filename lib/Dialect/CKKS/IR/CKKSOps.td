@@ -8,14 +8,25 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 
 include "lib/Dialect/LWE/IR/LWETypes.td"
 include "lib/Dialect/LWE/IR/LWETraits.td"
-include "mlir/Dialect/Polynomial/IR/PolynomialAttributes.td"
+include "lib/Dialect/Polynomial/IR/PolynomialAttributes.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/BuiltinAttributes.td"
 
 class CKKS_Op<string mnemonic, list<Trait> traits = []> :
-        Op<CKKS_Dialect, mnemonic, traits> {
+        Op<CKKS_Dialect, mnemonic, traits # [OpAsmOpInterface]> {
   let cppNamespace = "::mlir::heir::ckks";
   let assemblyFormat = [{
     operands attr-dict `:`  functional-type(operands, results)
+  }];
+
+  let extraClassDeclaration = [{
+    // OpAsmOpInterface Methods
+    void getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
+      for (auto result : getOperation()->getResults()) {
+        if (auto ty = dyn_cast<TypeAsmInterface>(result.getType()))
+          setNameFn(result, ty.suggestedName());
+      }
+    }
   }];
 }
 
@@ -23,69 +34,64 @@ class CKKS_CiphertextPlaintextOp<string mnemonic, list<Trait> traits =
     [Pure, AllTypesMatch<["ciphertextInput", "output"]>,
     TypesMatchWith<"type of 'plaintextInput' matches encoding type of 'ciphertextInput'",
                     "ciphertextInput", "plaintextInput",
-                    "lwe::RLWEPlaintextType::get($_ctxt, "
-                      "::llvm::cast<lwe::RLWECiphertextType>($_self).getEncoding(),"
-                      "::llvm::cast<lwe::RLWECiphertextType>($_self).getRlweParams().getRing(),"
-                      "::llvm::cast<lwe::RLWECiphertextType>($_self).getUnderlyingType())">]> :
+                    "lwe::NewLWEPlaintextType::get($_ctxt, "
+                      "::llvm::cast<lwe::NewLWECiphertextType>($_self).getApplicationData(),"
+                      "::llvm::cast<lwe::NewLWECiphertextType>($_self).getPlaintextSpace())">]> :
         CKKS_Op<mnemonic, traits> {
   let arguments = (ins
-    RLWECiphertext:$ciphertextInput,
-    RLWEPlaintext:$plaintextInput
+    NewLWECiphertext:$ciphertextInput,
+    NewLWEPlaintext:$plaintextInput
   );
 
   let results = (outs
-    RLWECiphertext:$output
+    NewLWECiphertext:$output
   );
 }
 
-def CKKS_AddOp : CKKS_Op<"add", [Pure, Commutative, SameOperandsAndResultType]> {
+def CKKS_AddOp : CKKS_Op<"add", [Pure, Commutative, SameOperandsAndResultRings, InferTypeOpAdaptor]> {
   let summary = "Addition operation between ciphertexts.";
 
   let arguments = (ins
-    RLWECiphertext:$lhs,
-    RLWECiphertext:$rhs
+    NewLWECiphertext:$lhs,
+    NewLWECiphertext:$rhs
   );
 
   let results = (outs
-    RLWECiphertext:$output
+    NewLWECiphertext:$output
   );
-
-  let assemblyFormat = "operands attr-dict `:` qualified(type($output))" ;
 }
 
 def CKKS_AddPlainOp : CKKS_CiphertextPlaintextOp<"add_plain"> {
   let summary = "Addition operation between ciphertext-plaintext.";
 }
 
-def CKKS_SubOp : CKKS_Op<"sub", [SameOperandsAndResultType]> {
+def CKKS_SubOp : CKKS_Op<"sub", [Pure, SameOperandsAndResultRings, InferTypeOpAdaptor]> {
   let summary = "Subtraction operation between ciphertexts.";
 
   let arguments = (ins
-    RLWECiphertext:$lhs,
-    RLWECiphertext:$rhs
+    NewLWECiphertext:$lhs,
+    NewLWECiphertext:$rhs
   );
 
   let results = (outs
-    RLWECiphertext:$output
+    NewLWECiphertext:$output
   );
-
-  let assemblyFormat = "operands attr-dict `:` qualified(type($output))" ;
 }
 
 def CKKS_SubPlainOp : CKKS_CiphertextPlaintextOp<"sub_plain"> {
   let summary = "Subtraction operation between ciphertext-plaintext.";
 }
 
-def CKKS_MulOp : CKKS_Op<"mul", [Pure, Commutative, SameOperandsAndResultRings, SameTypeOperands, InferTypeOpAdaptor]> {
+def CKKS_MulOp : CKKS_Op<"mul", [Pure, Commutative, SameOperandsAndResultRings, InferTypeOpAdaptor]> {
   let summary = "Multiplication operation between ciphertexts.";
 
   let arguments = (ins
-    RLWECiphertext:$lhs,
-    RLWECiphertext:$rhs
+    NewLWECiphertext:$lhs,
+    NewLWECiphertext:$rhs
   );
 
   let results = (outs
-    RLWECiphertext:$output
+    NewLWECiphertext:$output
   );
 
   let hasVerifier = 1;
@@ -99,12 +105,12 @@ def CKKS_RotateOp : CKKS_Op<"rotate", [Pure, AllTypesMatch<["input", "output"]>]
   let summary = "Rotate the coefficients of the ciphertext using a Galois automorphism.";
 
   let arguments = (ins
-    RLWECiphertext:$input,
+    NewLWECiphertext:$input,
     Builtin_IntegerAttr:$offset
   );
 
   let results = (outs
-    RLWECiphertext:$output
+    NewLWECiphertext:$output
   );
 
   let hasVerifier = 1;
@@ -128,12 +134,12 @@ def CKKS_ExtractOp : CKKS_Op<"extract", [SameOperandsAndResultRings]> {
   }];
 
   let arguments = (ins
-    RLWECiphertext:$input,
+    NewLWECiphertext:$input,
     AnySignlessIntegerOrIndex:$offset
   );
 
   let results = (outs
-    RLWECiphertext:$output
+    NewLWECiphertext:$output
   );
 
   let hasVerifier = 1;
@@ -143,11 +149,11 @@ def CKKS_NegateOp : CKKS_Op<"negate", [Pure, SameOperandsAndResultType, Involuti
   let summary = "Negate the coefficients of the ciphertext.";
 
   let arguments = (ins
-    RLWECiphertext:$input
+    NewLWECiphertext:$input
   );
 
   let results = (outs
-    RLWECiphertext:$output
+    NewLWECiphertext:$output
   );
 
   let assemblyFormat = "operands attr-dict `:` qualified(type($output))" ;
@@ -167,13 +173,13 @@ def CKKS_RelinearizeOp : CKKS_Op<"relinearize", [Pure, SameOperandsAndResultRing
   }];
 
   let arguments = (ins
-    RLWECiphertext:$input,
+    NewLWECiphertext:$input,
     DenseI32ArrayAttr:$from_basis,
     DenseI32ArrayAttr:$to_basis
   );
 
   let results = (outs
-    RLWECiphertext:$output
+    NewLWECiphertext:$output
   );
 
   let hasVerifier = 1;
@@ -184,15 +190,34 @@ def CKKS_RescaleOp : CKKS_Op<"rescale", [Pure]> {
   let summary = "Rescales the ciphertext, which is the CKKS version of modulus switching in BGV/BFV.";
 
   let arguments = (ins
-    RLWECiphertext:$input,
+    NewLWECiphertext:$input,
     Polynomial_RingAttr:$to_ring
   );
 
   let results = (outs
-    RLWECiphertext:$output
+    NewLWECiphertext:$output
   );
 
   let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` qualified(type($input)) `->` qualified(type($output))" ;
+}
+
+def CKKS_BootstrapOp : CKKS_Op<"bootstrap", [Pure]> {
+  let summary = "Bootstrap the ciphertext to reduce noise and refresh its parameters.";
+
+  let description = [{
+    Bootstrapping is a technique used in FHE to reduce the noise in a ciphertext
+    and refresh its parameters, allowing for further computations on the ciphertext.
+  }];
+
+  let arguments = (ins
+    NewLWECiphertext:$input
+  );
+
+  let results = (outs
+    NewLWECiphertext:$output
+  );
+
   let assemblyFormat = "operands attr-dict `:` qualified(type($input)) `->` qualified(type($output))" ;
 }
 

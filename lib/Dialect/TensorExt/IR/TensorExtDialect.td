@@ -2,6 +2,7 @@
 #define LIB_DIALECT_TENSOREXT_IR_TENSOREXTDIALECT_TD_
 
 include "mlir/IR/DialectBase.td"
+include "mlir/IR/OpBase.td"
 
 def TensorExt_Dialect : Dialect {
   let name = "tensor_ext";
@@ -15,6 +16,12 @@ def TensorExt_Dialect : Dialect {
   let dependentDialects = [
     "tensor::TensorDialect",
   ];
+
+  let extraClassDeclaration = [{
+    constexpr const static ::llvm::StringLiteral
+        kLayoutAttrName = "tensor_ext.layout";
+  }];
+
 
   let useDefaultAttributePrinterParser = 1;
 }

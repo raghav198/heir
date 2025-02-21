@@ -1,6 +1,7 @@
 #include "lib/Target/TfheRust/TfheRustEmitter.h"
 
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <iterator>
@@ -13,10 +14,10 @@
 #include "lib/Dialect/TfheRust/IR/TfheRustDialect.h"
 #include "lib/Dialect/TfheRust/IR/TfheRustOps.h"
 #include "lib/Dialect/TfheRust/IR/TfheRustTypes.h"
-#include "lib/Graph/Graph.h"
 #include "lib/Target/TfheRust/TfheRustTemplates.h"
 #include "lib/Target/TfheRust/Utils.h"
-#include "lib/Target/Utils.h"
+#include "lib/Utils/Graph/Graph.h"
+#include "lib/Utils/TargetUtils.h"
 #include "llvm/include/llvm/ADT/STLExtras.h"           // from @llvm-project
 #include "llvm/include/llvm/ADT/SmallVector.h"         // from @llvm-project
 #include "llvm/include/llvm/ADT/TypeSwitch.h"          // from @llvm-project
@@ -202,7 +203,7 @@ LogicalResult TfheRustEmitter::emitBlock(::mlir::Operation *op) {
     for (size_t level = 0; level < levels.size(); ++level) {
       os << llvm::formatv(
           "run_level({1}, &mut temp_nodes, &mut luts, &LEVEL_{0});\n", level,
-          serverKeyArg_);
+          serverKeyArg);
     }
   }
   // Continue to emit the block.
@@ -210,7 +211,7 @@ LogicalResult TfheRustEmitter::emitBlock(::mlir::Operation *op) {
 }
 
 LogicalResult TfheRustEmitter::translateBlock(Block &block) {
-  if (useLevels_) {
+  if (useLevels) {
     Operation *op = &block.getOperations().front();
     return emitBlock(op);
   }
@@ -298,13 +299,13 @@ LogicalResult TfheRustEmitter::printOperation(func::FuncOp funcOp) {
     }
     os << ",\n";
     if (isa<tfhe_rust::ServerKeyType>(arg.getType())) {
-      serverKeyArg_ = argName;
+      serverKeyArg = argName;
     }
   }
   os.unindent();
   os << ")";
 
-  if (serverKeyArg_.empty()) {
+  if (serverKeyArg.empty()) {
     return funcOp.emitWarning() << "expected server key function argument to "
                                    "create default ciphertexts";
   }
@@ -336,7 +337,7 @@ LogicalResult TfheRustEmitter::printOperation(func::FuncOp funcOp) {
   // Create a global temp_nodes hashmap for any created SSA values.
   // TODO(#462): Insert block argument that are encrypted ints into
   // temp_nodes.
-  if (useLevels_) {
+  if (useLevels) {
     os << "let mut temp_nodes : HashMap<usize, Ciphertext> = "
           "HashMap::new();\n";
     os << "let mut luts : HashMap<&str, LookupTableOwned> = "
@@ -378,7 +379,7 @@ LogicalResult TfheRustEmitter::printOperation(func::ReturnOp op) {
         res = llvm::formatv("core::array::from_fn(|i{0}| {1})", i--, res);
       }
       return res;
-    } else if (isLevelledOp(value.getDefiningOp()) && useLevels_) {
+    } else if (isLevelledOp(value.getDefiningOp()) && useLevels) {
       // This is from a levelled op stored in temp nodes.
       return std::string(
           llvm::formatv("temp_nodes[&{0}]",
@@ -424,7 +425,7 @@ LogicalResult TfheRustEmitter::printSksMethod(
   os << variableNames->getNameForValue(sks) << "." << op << "(";
   os << commaSeparatedValues(nonSksOperands, [&](Value value) {
     auto valueStr = variableNames->getNameForValue(value);
-    if (isa<LookupTableType>(value.getType()) && useLevels_) {
+    if (isa<LookupTableType>(value.getType()) && useLevels) {
       valueStr = "luts[\"" + variableNames->getNameForValue(value) + "\"]";
     }
     std::string prefix = value.getType().hasTrait<PassByReference>() ? "&" : "";
@@ -436,7 +437,7 @@ LogicalResult TfheRustEmitter::printSksMethod(
 
   // Insert ciphertext results into temp_nodes so that the levelled ops can
   // reference them.
-  if (usedByLevelledOp(result) && useLevels_) {
+  if (usedByLevelledOp(result) && useLevels) {
     os << llvm::formatv("temp_nodes.insert({0}, {1}.clone());\n",
                         variableNames->getIntForValue(result),
                         variableNames->getNameForValue(result));
@@ -470,7 +471,7 @@ LogicalResult TfheRustEmitter::printOperation(GenerateLookupTableOp op) {
   uint64_t truthTable = op.getTruthTable().getUInt();
   auto result = op.getResult();
 
-  if (useLevels_) {
+  if (useLevels) {
     os << "luts.insert(\"" << variableNames->getNameForValue(result) << "\", ";
   } else {
     emitAssignPrefix(result);
@@ -478,7 +479,7 @@ LogicalResult TfheRustEmitter::printOperation(GenerateLookupTableOp op) {
   os << variableNames->getNameForValue(sks) << ".generate_lookup_table(";
   os << "|x| (" << std::to_string(truthTable) << " >> x) & 1)";
 
-  if (useLevels_) {
+  if (useLevels) {
     os << ")";
   }
   os << ";\n";
@@ -492,11 +493,7 @@ std::string TfheRustEmitter::operationType(Operation *op) {
                "\")";
       })
       .Case<tfhe_rust::ScalarLeftShiftOp>([&](ScalarLeftShiftOp op) {
-        auto constantShift =
-            cast<arith::ConstantOp>(op.getShiftAmount().getDefiningOp());
-        return "LSH(" +
-               std::to_string(
-                   cast<IntegerAttr>(constantShift.getValue()).getInt()) +
+        return "LSH(" + std::to_string(op.getShiftAmount().getSExtValue()) +
                ")";
       })
       .Case<tfhe_rust::AddOp>([&](Operation *) { return "ADD"; });
@@ -518,9 +515,17 @@ LogicalResult TfheRustEmitter::printOperation(affine::AffineForOp forOp) {
 }
 
 LogicalResult TfheRustEmitter::printOperation(ScalarLeftShiftOp op) {
-  return printSksMethod(op.getResult(), op.getServerKey(),
-                        {op.getCiphertext(), op.getShiftAmount()},
-                        "scalar_left_shift", {"", "u8"});
+  emitAssignPrefix(op.getResult());
+  os << variableNames->getNameForValue(op.getServerKey())
+     << ".scalar_left_shift(";
+
+  auto valueStr = variableNames->getNameForValue(op.getCiphertext());
+  std::string prefix =
+      op.getCiphertext().getType().hasTrait<PassByReference>() ? "&" : "";
+  auto cipherString = prefix + valueStr;
+
+  os << cipherString << ", " << op.getShiftAmount() << " as u8);\n";
+  return success();
 }
 
 LogicalResult TfheRustEmitter::printOperation(CreateTrivialOp op) {
@@ -684,7 +689,7 @@ void TfheRustEmitter::printStoreOp(memref::StoreOp op,
 LogicalResult TfheRustEmitter::printOperation(memref::StoreOp op) {
   auto valueToStore = variableNames->getNameForValue(op.getValueToStore());
 
-  if (isLevelledOp(op.getValueToStore().getDefiningOp()) && useLevels_) {
+  if (isLevelledOp(op.getValueToStore().getDefiningOp()) && useLevels) {
     valueToStore =
         llvm::formatv("temp_nodes[&{0}].clone()",
                       variableNames->getIntForValue(op.getValueToStore()));
@@ -727,7 +732,7 @@ void TfheRustEmitter::printLoadOp(memref::LoadOp op) {
 LogicalResult TfheRustEmitter::printOperation(memref::LoadOp op) {
   // If the load op result is used in a levelled op, insert it into the
   // temp_nodes map.
-  if (usedByLevelledOp(op) && useLevels_) {
+  if (usedByLevelledOp(op) && useLevels) {
     os << llvm::formatv("temp_nodes.insert({0}, ",
                         variableNames->getIntForValue(op.getResult()));
     printLoadOp(op);
@@ -735,14 +740,11 @@ LogicalResult TfheRustEmitter::printOperation(memref::LoadOp op) {
   }
 
   // If any uses are outside the levelled op, also assign it it's SSA value.
-  if (usedByNonLevelledOp(op) || !useLevels_) {
+  if (usedByNonLevelledOp(op) || !useLevels) {
     emitAssignPrefix(op.getResult());
     bool isRef =
         isa<tfhe_rust::TfheRustDialect>(op.getResult().getType().getDialect());
-    bool storeUse = llvm::all_of(op.getResult().getUsers(), [](Operation *op) {
-      return isa<memref::StoreOp>(*op);
-    });
-    os << ((isRef && !storeUse) ? "&" : "");
+    os << (isRef ? "&" : "");
     printLoadOp(op);
     os << ";\n";
   }
@@ -755,7 +757,7 @@ FailureOr<std::string> TfheRustEmitter::convertType(Type type) {
   // they will need to chance to the right values once we try to compile it
   // against a specific API version.
 
-  if (type.hasTrait<EncryptedInteger>()) {
+  if (type.hasTrait<EncryptedInteger>() || isa<EncryptedBoolType>(type)) {
     return std::string("Ciphertext");
   }
 
@@ -794,9 +796,9 @@ FailureOr<std::string> TfheRustEmitter::convertType(Type type) {
 
 FailureOr<std::string> TfheRustEmitter::defaultValue(Type type) {
   if (type.hasTrait<EncryptedInteger>()) {
-    if (serverKeyArg_.empty()) return failure();
+    if (serverKeyArg.empty()) return failure();
     return std::string(
-        llvm::formatv("{0}.create_trivial(0 as u64)", serverKeyArg_));
+        llvm::formatv("{0}.create_trivial(0 as u64)", serverKeyArg));
   };
   return llvm::TypeSwitch<Type &, FailureOr<std::string>>(type)
       .Case<IntegerType>([&](IntegerType type) { return std::string("0"); })
@@ -820,7 +822,7 @@ LogicalResult TfheRustEmitter::emitType(Type type) {
 TfheRustEmitter::TfheRustEmitter(raw_ostream &os,
                                  SelectVariableNames *variableNames,
                                  bool useLevels)
-    : useLevels_(useLevels), os(os), variableNames(variableNames) {}
+    : useLevels(useLevels), os(os), variableNames(variableNames) {}
 }  // namespace tfhe_rust
 }  // namespace heir
 }  // namespace mlir

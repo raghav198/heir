@@ -2,8 +2,9 @@
 
 #include <utility>
 
-#include "mlir/include/mlir/IR/MLIRContext.h"   // from @llvm-project
-#include "mlir/include/mlir/IR/PatternMatch.h"  // from @llvm-project
+#include "mlir/include/mlir/Dialect/Tensor/IR/Tensor.h"  // from @llvm-project
+#include "mlir/include/mlir/IR/MLIRContext.h"            // from @llvm-project
+#include "mlir/include/mlir/IR/PatternMatch.h"           // from @llvm-project
 #include "mlir/include/mlir/Transforms/GreedyPatternRewriteDriver.h"  // from @llvm-project
 #include "mlir/include/mlir/Transforms/Passes.h"  // from @llvm-project
 
@@ -19,10 +20,13 @@ struct ApplyFolders : impl::ApplyFoldersBase<ApplyFolders> {
   void runOnOperation() override {
     MLIRContext *context = &getContext();
     RewritePatternSet patterns(context);
-    // No patterns added on purpose: this results in the greedy driver just
-    // running folders.
-
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    tensor::ControlConstantExtractSliceFusionFn controlFn =
+        [](tensor::ExtractSliceOp op) { return true; };
+    tensor::populateFoldConstantExtractSlicePatterns(patterns, controlFn);
+    // Use the greedy pattern driver to apply folders.
+    // TODO (#1221): Investigate whether folding (default: on) can be skipped
+    // here.
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

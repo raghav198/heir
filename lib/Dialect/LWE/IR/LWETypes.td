@@ -3,17 +3,11 @@
 
 include "lib/Dialect/LWE/IR/LWEDialect.td"
 include "lib/Dialect/LWE/IR/LWEAttributes.td"
+include "lib/Dialect/LWE/IR/NewLWETypes.td"
 
 include "mlir/IR/DialectBase.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
-
-// A base class for all types in this dialect
-class LWE_Type<string name, string typeMnemonic, list<Trait> traits = []>
-    : TypeDef<LWE_Dialect, name, traits> {
-  let mnemonic = typeMnemonic;
-  let assemblyFormat = "`<` struct(params) `>`";
-}
 
 // LWE Ciphertexts are ranked tensors of integers representing the LWE samples
 // and the bias.
@@ -33,9 +27,10 @@ def LWECiphertext : LWE_Type<"LWECiphertext", "lwe_ciphertext", [MemRefElementTy
     "::mlir::Attribute":$encoding,
     OptionalParameter<"LWEParamsAttr">:$lwe_params
   );
+  let nameSuggestion = "ct";
 }
 
-def LWECiphertextLike : TypeOrContainer<LWECiphertext, "ciphertext-like">;
+def LWECiphertextLike : TypeOrValueSemanticsContainer<LWECiphertext, "ciphertext-like">;
 
 def RLWECiphertext : LWE_Type<"RLWECiphertext", "rlwe_ciphertext"> {
   let summary = "A type for RLWE ciphertexts";
@@ -44,18 +39,21 @@ def RLWECiphertext : LWE_Type<"RLWECiphertext", "rlwe_ciphertext"> {
     "RLWEParamsAttr":$rlwe_params,
     "Type":$underlying_type
   );
+  let nameSuggestion = "ct";
 }
 
-def RLWECiphertextLike : TypeOrContainer<RLWECiphertext, "ciphertext-like">;
+def RLWECiphertextLike : TypeOrValueSemanticsContainer<RLWECiphertext, "ciphertext-like">;
 
 def RLWESecretKey : LWE_Type<"RLWESecretKey", "rlwe_secret_key"> {
   let summary = "A secret key for RLWE";
   let parameters = (ins "RLWEParamsAttr":$rlwe_params);
+  let nameSuggestion = "sk";
 }
 
 def RLWEPublicKey : LWE_Type<"RLWEPublicKey", "rlwe_public_key"> {
   let summary = "A public key for RLWE";
   let parameters = (ins "RLWEParamsAttr":$rlwe_params);
+  let nameSuggestion = "pk";
 }
 
 def RLWESecretOrPublicKey : AnyTypeOf<[RLWESecretKey, RLWEPublicKey]>;
@@ -73,16 +71,23 @@ def LWEPlaintext : LWE_Type<"LWEPlaintext", "lwe_plaintext"> {
   let parameters = (ins
     "::mlir::Attribute":$encoding
   );
+  let nameSuggestion = "pt";
 }
+
+def LWEPlaintextLike : TypeOrValueSemanticsContainer<LWEPlaintext, "lwe-plaintext-like">;
 
 def RLWEPlaintext : LWE_Type<"RLWEPlaintext", "rlwe_plaintext"> {
   let summary = "A type for RLWE plaintexts";
 
   let parameters = (ins
     "::mlir::Attribute":$encoding,
-    "::mlir::polynomial::RingAttr":$ring,
+    "::mlir::heir::polynomial::RingAttr":$ring,
     "Type":$underlying_type
   );
+  let nameSuggestion = "pt";
 }
+
+def RLWEPlaintextLike : TypeOrValueSemanticsContainer<RLWEPlaintext, "rlwe-plaintext-like">;
+
 
 #endif  // LIB_DIALECT_LWE_IR_LWETYPES_TD_

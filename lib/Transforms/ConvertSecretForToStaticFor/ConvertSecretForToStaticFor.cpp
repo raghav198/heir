@@ -36,22 +36,8 @@ struct SecretForToStaticForConversion : OpRewritePattern<scf::ForOp> {
 
   LogicalResult matchAndRewrite(scf::ForOp forOp,
                                 PatternRewriter &rewriter) const override {
-    auto *lowerBoundSecretnessLattice =
-        solver->lookupState<SecretnessLattice>(forOp.getLowerBound());
-
-    auto *upperBoundSecretnessLattice =
-        solver->lookupState<SecretnessLattice>(forOp.getUpperBound());
-
-    if (!lowerBoundSecretnessLattice && !upperBoundSecretnessLattice)
-      return failure();
-
-    // Get secretness state of the lower and upper bounds
-    bool isLowerBoundSecret =
-        lowerBoundSecretnessLattice &&
-        lowerBoundSecretnessLattice->getValue().getSecretness();
-    bool isUpperBoundSecret =
-        upperBoundSecretnessLattice &&
-        upperBoundSecretnessLattice->getValue().getSecretness();
+    bool isLowerBoundSecret = isSecret(forOp.getLowerBound(), solver);
+    bool isUpperBoundSecret = isSecret(forOp.getUpperBound(), solver);
 
     // If both bounds are non-secret constants, return
     if (!isLowerBoundSecret && !isUpperBoundSecret) return failure();
@@ -193,7 +179,9 @@ struct ConvertSecretForToStaticFor
     }
 
     patterns.add<SecretForToStaticForConversion>(&solver, context);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    // TODO (#1221): Investigate whether folding (default: on) can be skipped
+    // here.
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

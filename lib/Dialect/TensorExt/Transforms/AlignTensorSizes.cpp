@@ -1,14 +1,15 @@
 #include "lib/Dialect/TensorExt/Transforms/AlignTensorSizes.h"
 
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <utility>
 
-#include "lib/Conversion/Utils.h"
 #include "lib/Dialect/Secret/IR/SecretTypes.h"
 #include "lib/Dialect/TensorExt/IR/TensorExtAttributes.h"
 #include "lib/Dialect/TensorExt/IR/TensorExtDialect.h"
+#include "lib/Utils/ConversionUtils.h"
 #include "llvm/include/llvm/ADT/ArrayRef.h"              // from @llvm-project
 #include "llvm/include/llvm/ADT/STLExtras.h"             // from @llvm-project
 #include "llvm/include/llvm/Support/MathExtras.h"        // from @llvm-project
@@ -170,7 +171,7 @@ struct AlignTensorSizes : impl::AlignTensorSizesBase<AlignTensorSizes> {
     SecretTensorTypeConverter typeConverter(size);
 
     RewritePatternSet patterns(context);
-    patterns.add<ConvertAny, ConvertTensorExtractOp, ConvertTensorInsertOp>(
+    patterns.add<ConvertAny<>, ConvertTensorExtractOp, ConvertTensorInsertOp>(
         typeConverter, context);
 
     ConversionTarget target(*context);

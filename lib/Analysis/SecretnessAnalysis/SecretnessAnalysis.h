@@ -1,11 +1,17 @@
 #ifndef LIB_ANALYSIS_SECRETNESSANALYSIS_SECRETNESSANALYSIS_H_
 #define LIB_ANALYSIS_SECRETNESSANALYSIS_SECRETNESSANALYSIS_H_
 
+#include <cassert>
 #include <optional>
 
+#include "llvm/include/llvm/ADT/ArrayRef.h"  // from @llvm-project
 #include "mlir/include/mlir/Analysis/DataFlow/SparseAnalysis.h"  // from @llvm-project
-#include "mlir/include/mlir/IR/Operation.h"  // from @llvm-project
-#include "mlir/include/mlir/IR/Value.h"      // from @llvm-project
+#include "mlir/include/mlir/Analysis/DataFlowFramework.h"  // from @llvm-project
+#include "mlir/include/mlir/IR/Operation.h"                // from @llvm-project
+#include "mlir/include/mlir/IR/Value.h"                    // from @llvm-project
+#include "mlir/include/mlir/IR/ValueRange.h"               // from @llvm-project
+#include "mlir/include/mlir/Interfaces/CallInterfaces.h"   // from @llvm-project
+#include "mlir/include/mlir/Support/LLVM.h"                // from @llvm-project
 
 namespace mlir {
 namespace heir {
@@ -25,6 +31,7 @@ class Secretness {
     assert(isInitialized());
     return *secretness;
   }
+  const bool &get() const { return getSecretness(); }
   void setSecretness(bool value) { secretness = value; }
 
   // Check if the Secretness state is initialized. It can be uninitialized if
@@ -104,7 +111,128 @@ class SecretnessAnalysis
   LogicalResult visitOperation(Operation *operation,
                                ArrayRef<const SecretnessLattice *> operands,
                                ArrayRef<SecretnessLattice *> results) override;
+
+  void visitExternalCall(CallOpInterface call,
+                         ArrayRef<const SecretnessLattice *> argumentLattices,
+                         ArrayRef<SecretnessLattice *> resultLattices) override;
+
+  void propagateIfChangedWrapper(AnalysisState *state, ChangeResult changed) {
+    propagateIfChanged(state, changed);
+  }
 };
+
+/**
+ * @class SecretnessAnalysisDependent
+ * @brief A class that provides methods to analyze and ensure the secretness of
+ * operations and their operands/results.
+ *
+ * This class is designed to be used within an analysis framework to determine
+ * the secretness of values and create dependencies on SecretnessAnalysis.
+ */
+template <typename ChildAnalysis>
+class SecretnessAnalysisDependent {
+ private:
+  ChildAnalysis *getChildAnalysis() {
+    return static_cast<ChildAnalysis *>(this);
+  }
+
+ protected:
+  /**
+   * @brief Ensures the secretness of a given value within an operation.
+   *
+   * This method creates a SecretnessLattice for the given value and establishes
+   * a dependency on SecretnessAnalysis.
+   *
+   * @param op The operation containing the value (either Operand or Result).
+   * @param value The value to check for secretness.
+   * @return true if the value is secret, false if the secretness of the value
+   * is unknown or false.
+   */
+  bool isSecretInternal(Operation *op, Value value) {
+    // create dependency on SecretnessAnalysis
+    auto *lattice =
+        getChildAnalysis()->template getOrCreateFor<SecretnessLattice>(
+            getChildAnalysis()->getProgramPointAfter(op), value);
+    if (!lattice->getValue().isInitialized()) {
+      return false;
+    }
+    return lattice->getValue().getSecretness();
+  };
+
+  /**
+   * @brief Selects the OpResults of an operation that are secret (secretness =
+   * true).
+   *
+   * This method iterates through the results of the given operation and adds
+   * those that are secret to the provided vector.
+   *
+   * @param op The operation to analyze.
+   * @param secretResults A vector to store the secret results.
+   */
+  void getSecretResults(Operation *op,
+                        SmallVectorImpl<OpResult> &secretResults) {
+    for (const auto &result : op->getOpResults()) {
+      if (isSecretInternal(op, result)) {
+        secretResults.push_back(result);
+      }
+    }
+  }
+
+  /**
+   * @brief Selects the OpOperands of an operation that are secret (secretness =
+   * true).
+   *
+   * This method iterates through the operands of the given operation and adds
+   * those that are secret to the provided vector.
+   *
+   * @param op The operation to analyze.
+   * @param secretOperands A vector to store the secret operands.
+   */
+  void getSecretOperands(Operation *op,
+                         SmallVectorImpl<OpOperand *> &secretOperands) {
+    for (auto &operand : op->getOpOperands()) {
+      if (isSecretInternal(op, operand.get())) {
+        secretOperands.push_back(&operand);
+      }
+    }
+  }
+
+  /**
+   * @brief Selects the OpOperands of an operation that are not secret
+   * (secretness = false or unknown).
+   *
+   * This method iterates through the operands of the given operation and adds
+   * those that are not secret to the provided vector.
+   *
+   * @param op The operation to analyze.
+   * @param nonSecretOperands A vector to store the non-secret operands.
+   */
+  void getNonSecretOperands(Operation *op,
+                            SmallVectorImpl<OpOperand *> &nonSecretOperands) {
+    for (auto &operand : op->getOpOperands()) {
+      if (!isSecretInternal(op, operand.get())) {
+        nonSecretOperands.push_back(&operand);
+      }
+    }
+  }
+};
+
+// Annotate the secretness of operation based on the secretness of its results
+// If verbose = true, annotates the secretness of *all* values,
+// including ones with public secretness , missing, or inconclusive analysis.
+void annotateSecretness(Operation *top, DataFlowSolver *solver, bool verbose);
+
+// this method is used when DataFlowSolver has finished running the secretness
+// analysis
+bool isSecret(Value value, DataFlowSolver *solver);
+
+bool isSecret(const SecretnessLattice *lattice);
+
+bool isSecret(ValueRange values, DataFlowSolver *solver);
+
+void getSecretOperands(Operation *op,
+                       SmallVectorImpl<OpOperand *> &secretOperands,
+                       DataFlowSolver *solver);
 
 }  // namespace heir
 }  // namespace mlir

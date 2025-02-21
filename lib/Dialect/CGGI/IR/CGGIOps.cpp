@@ -1,10 +1,12 @@
 #include "lib/Dialect/CGGI/IR/CGGIOps.h"
 
 #include <cstdint>
+#include <optional>
 
 #include "lib/Dialect/LWE/IR/LWEAttributes.h"
 #include "lib/Dialect/LWE/IR/LWETypes.h"
 #include "mlir/include/mlir/IR/Diagnostics.h"         // from @llvm-project
+#include "mlir/include/mlir/IR/PatternMatch.h"        // from @llvm-project
 #include "mlir/include/mlir/IR/TypeUtilities.h"       // from @llvm-project
 #include "mlir/include/mlir/IR/ValueRange.h"          // from @llvm-project
 #include "mlir/include/mlir/Support/LLVM.h"           // from @llvm-project
@@ -14,10 +16,12 @@ namespace mlir {
 namespace heir {
 namespace cggi {
 
-ValueRange Lut2Op::getLookupTableInputs() { return ValueRange{getB(), getA()}; }
+std::optional<ValueRange> Lut2Op::getLookupTableInputs() {
+  return ValueRange{getB(), getA()};
+}
 
 LogicalResult Lut2Op::canonicalize(Lut2Op op, PatternRewriter &rewriter) {
-  SmallVector<int32_t> coeffs2 = {1, 2};
+  SmallVector<int32_t> coeffs2 = {2, 1};
   auto createLutLinCombOp = rewriter.create<LutLinCombOp>(
       op.getLoc(), op.getOutput().getType(), op.getOperands(), coeffs2,
       op.getLookupTable());
@@ -25,12 +29,12 @@ LogicalResult Lut2Op::canonicalize(Lut2Op op, PatternRewriter &rewriter) {
   return success();
 }
 
-ValueRange Lut3Op::getLookupTableInputs() {
+std::optional<ValueRange> Lut3Op::getLookupTableInputs() {
   return ValueRange{getC(), getB(), getA()};
 }
 
 LogicalResult Lut3Op::canonicalize(Lut3Op op, PatternRewriter &rewriter) {
-  SmallVector<int> coeffs3 = {1, 2, 4};
+  SmallVector<int> coeffs3 = {4, 2, 1};
 
   auto createLutLinCombOp = rewriter.create<LutLinCombOp>(
       op.getLoc(), op.getOutput().getType(), op.getOperands(), coeffs3,
@@ -39,8 +43,12 @@ LogicalResult Lut3Op::canonicalize(Lut3Op op, PatternRewriter &rewriter) {
   return success();
 }
 
-ValueRange LutLinCombOp::getLookupTableInputs() {
+std::optional<ValueRange> LutLinCombOp::getLookupTableInputs() {
   return ValueRange{getInputs()};
+}
+
+std::optional<ValueRange> PackedLut3Op::getLookupTableInputs() {
+  return std::nullopt;
 }
 
 LogicalResult LutLinCombOp::verify() {
@@ -66,6 +74,27 @@ LogicalResult LutLinCombOp::verify() {
       }
     }
 
+    if (getLookupTable().getValue().getActiveBits() > maxCoeff + 1) {
+      InFlightDiagnostic diag =
+          emitOpError("LUT is larger than available cleartext bit width");
+      diag.attachNote() << "LUT has "
+                        << getLookupTable().getValue().getActiveBits()
+                        << " active bits";
+      diag.attachNote() << "max LUT size is " << maxCoeff + 1 << " bits";
+      return diag;
+    }
+  }
+
+  return success();
+}
+
+LogicalResult ProgrammableBootstrapOp::verify() {
+  lwe::LWECiphertextType type =
+      cast<lwe::LWECiphertextType>(getElementTypeOrSelf(getOutput().getType()));
+  auto encoding = dyn_cast<lwe::BitFieldEncodingAttr>(type.getEncoding());
+
+  if (encoding) {
+    int64_t maxCoeff = (1 << encoding.getCleartextBitwidth()) - 1;
     if (getLookupTable().getValue().getActiveBits() > maxCoeff + 1) {
       InFlightDiagnostic diag =
           emitOpError("LUT is larger than available cleartext bit width");

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -9,11 +10,12 @@
 #include <string_view>
 #include <utility>
 
-#include "lib/Conversion/MemrefToArith/Utils.h"
 #include "lib/Dialect/Secret/IR/SecretDialect.h"
 #include "lib/Dialect/Secret/IR/SecretOps.h"
 #include "lib/Dialect/Secret/IR/SecretTypes.h"
-#include "lib/Target/Utils.h"
+#include "lib/Transforms/MemrefToArith/Utils.h"
+#include "lib/Utils/TargetUtils.h"
+#include "lib/Utils/Utils.h"
 #include "llvm/include/llvm/ADT/STLExtras.h"           // from @llvm-project
 #include "llvm/include/llvm/ADT/SmallString.h"         // from @llvm-project
 #include "llvm/include/llvm/ADT/SmallVector.h"         // from @llvm-project
@@ -21,6 +23,7 @@
 #include "llvm/include/llvm/ADT/StringRef.h"           // from @llvm-project
 #include "llvm/include/llvm/ADT/TypeSwitch.h"          // from @llvm-project
 #include "llvm/include/llvm/ADT/ilist.h"               // from @llvm-project
+#include "llvm/include/llvm/Support/Casting.h"         // from @llvm-project
 #include "llvm/include/llvm/Support/ErrorHandling.h"   // from @llvm-project
 #include "llvm/include/llvm/Support/FormatVariadic.h"  // from @llvm-project
 #include "llvm/include/llvm/Support/raw_ostream.h"     // from @llvm-project
@@ -37,6 +40,7 @@
 #include "mlir/include/mlir/IR/BuiltinTypes.h"           // from @llvm-project
 #include "mlir/include/mlir/IR/Diagnostics.h"            // from @llvm-project
 #include "mlir/include/mlir/IR/DialectRegistry.h"        // from @llvm-project
+#include "mlir/include/mlir/IR/SymbolTable.h"            // from @llvm-project
 #include "mlir/include/mlir/IR/Types.h"                  // from @llvm-project
 #include "mlir/include/mlir/IR/Value.h"                  // from @llvm-project
 #include "mlir/include/mlir/IR/ValueRange.h"             // from @llvm-project
@@ -131,6 +135,39 @@ CtlzValueStruct ctlzStructForResult(StringRef result) {
                          .temp4 = llvm::formatv("{0}_{1}", result, "temp4")};
 }
 
+func::FuncOp getCalledFunction(func::CallOp callOp) {
+  SymbolRefAttr sym =
+      llvm::dyn_cast_if_present<SymbolRefAttr>(callOp.getCallableForCallee());
+  if (!sym) return nullptr;
+  return dyn_cast_or_null<func::FuncOp>(
+      SymbolTable::lookupNearestSymbolFrom(callOp, sym));
+}
+
+int32_t getMaxMemrefIndexed(Value index) {
+  int32_t maxSize = 0;
+  for (auto &use : index.getUses()) {
+    Operation *user = use.getOwner();
+    int32_t memrefSize =
+        llvm::TypeSwitch<Operation *, int32_t>(user)
+            .Case<affine::AffineLoadOp, affine::AffineStoreOp, memref::LoadOp,
+                  memref::StoreOp>(
+                [&](auto op) { return op.getMemRefType().getNumElements(); })
+            .Case<func::CallOp>([&](func::CallOp op) {
+              // Index is passed into a function, get largest use.
+              func::FuncOp func = getCalledFunction(op);
+              auto &operand =
+                  func.getBody().getArguments()[use.getOperandNumber()];
+              assert(isa<IndexType>(operand.getType()) &&
+                     "expected block arg of index type use to be index type");
+              return getMaxMemrefIndexed(operand);
+            })
+            .Default([&](Operation *) { return 0; });
+    maxSize = std::max(maxSize, memrefSize);
+  }
+
+  return maxSize;
+}
+
 }  // namespace
 
 void registerToVerilogTranslation() {
@@ -155,14 +192,14 @@ LogicalResult translateToVerilog(Operation *op, llvm::raw_ostream &os,
                                  std::optional<llvm::StringRef> moduleName,
                                  bool allowSecretOps) {
   if (!allowSecretOps) {
-    auto result = op->walk([&](Operation *op) -> WalkResult {
-      if (isa<secret::SecretDialect>(op->getDialect())) {
-        op->emitError("allowSecretOps is false, but encountered a secret op.");
-        return WalkResult::interrupt();
-      }
-      return WalkResult::advance();
+    Operation *foundOp = walkAndDetect(op, [&](Operation *op) {
+      return isa<secret::SecretDialect>(op->getDialect());
     });
-    if (result.wasInterrupted()) return failure();
+    if (foundOp != nullptr) {
+      foundOp->emitError(
+          "allowSecretOps is false, but encountered a secret op.");
+      return failure();
+    }
   }
 
   VerilogEmitter emitter(os);
@@ -191,8 +228,8 @@ LogicalResult VerilogEmitter::translate(
           // Arithmetic ops.
           .Case<arith::ConstantOp>([&](arith::ConstantOp op) {
             if (auto iAttr = dyn_cast<IndexType>(op.getValue().getType())) {
-              // We can skip translating declarations of index constants. If the
-              // index is used in a subsequent load, e.g.
+              // We can skip translating declarations of index constants. If
+              // the index is used in a subsequent load, e.g.
               //   %1 = arith.constant 1 : index
               //   %2 = arith.load %foo[%1] : memref<3xi8>
               // then the load's constant index value can be inferred directly
@@ -956,17 +993,7 @@ LogicalResult VerilogEmitter::emitType(Type type, raw_ostream &os) {
 LogicalResult VerilogEmitter::emitIndexType(Value indexValue, raw_ostream &os) {
   // Operations on index types are not supported in this emitter, so we just
   // need to check the immediate users and inspect the memrefs they contain.
-  int32_t biggestMemrefSize = 0;
-  for (auto *user : indexValue.getUsers()) {
-    int32_t memrefSize =
-        llvm::TypeSwitch<Operation *, int32_t>(user)
-            .Case<affine::AffineLoadOp, affine::AffineStoreOp, memref::LoadOp,
-                  memref::StoreOp>(
-                [&](auto op) { return op.getMemRefType().getNumElements(); })
-            .Default([&](Operation *) { return 0; });
-    biggestMemrefSize = std::max(biggestMemrefSize, memrefSize);
-  }
-
+  int32_t biggestMemrefSize = getMaxMemrefIndexed(indexValue);
   assert(biggestMemrefSize >= 0 &&
          "unexpected index value unused by any memref ops");
   auto widthBigint = APInt(64, biggestMemrefSize);

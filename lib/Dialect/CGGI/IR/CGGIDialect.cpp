@@ -8,6 +8,8 @@
 #include "lib/Dialect/CGGI/IR/CGGIDialect.cpp.inc"
 #define GET_ATTRDEF_CLASSES
 #include "lib/Dialect/CGGI/IR/CGGIAttributes.cpp.inc"
+#define GET_TYPEDEF_CLASSES
+#include "lib/Dialect/CGGI/IR/CGGIEnums.cpp.inc"
 #define GET_OP_CLASSES
 #include "lib/Dialect/CGGI/IR/CGGIOps.cpp.inc"
 
@@ -33,7 +35,6 @@ void CGGIDialect::initialize() {
 
   getContext()->getOrLoadDialect("lwe");
 }
-
 }  // namespace cggi
 }  // namespace heir
 }  // namespace mlir

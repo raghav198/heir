@@ -1,6 +1,7 @@
 # BGV dialect
 
-load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library", "td_library")
+load("@heir//lib/Dialect:dialect.bzl", "add_heir_dialect_library")
+load("@llvm-project//mlir:tblgen.bzl", "td_library")
 
 package(
     default_applicable_licenses = ["@heir//:license"],
@@ -13,15 +14,16 @@ cc_library(
         "BGVDialect.cpp",
     ],
     hdrs = [
+        "BGVAttributes.h",
         "BGVDialect.h",
         "BGVOps.h",
     ],
     deps = [
+        ":attributes_inc_gen",
         ":dialect_inc_gen",
         ":ops_inc_gen",
         "@heir//lib/Dialect:FHEHelpers",
         "@heir//lib/Dialect/LWE/IR:Dialect",
-        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:InferTypeOpInterface",
         "@llvm-project//mlir:Support",
@@ -31,6 +33,7 @@ cc_library(
 td_library(
     name = "td_files",
     srcs = [
+        "BGVAttributes.td",
         "BGVDialect.td",
         "BGVOps.td",
     ],
@@ -40,57 +43,34 @@ td_library(
     ],
 )
 
-gentbl_cc_library(
+add_heir_dialect_library(
     name = "dialect_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-dialect-decls",
-            ],
-            "BGVDialect.h.inc",
-        ),
-        (
-            [
-                "-gen-dialect-defs",
-            ],
-            "BGVDialect.cpp.inc",
-        ),
-        (
-            [
-                "-gen-dialect-doc",
-            ],
-            "BGVDialect.md",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    dialect = "BGV",
+    kind = "dialect",
     td_file = "BGVDialect.td",
     deps = [
         ":td_files",
     ],
 )
 
-gentbl_cc_library(
+add_heir_dialect_library(
     name = "ops_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-op-decls"],
-            "BGVOps.h.inc",
-        ),
-        (
-            ["-gen-op-defs"],
-            "BGVOps.cpp.inc",
-        ),
-        (
-            ["-gen-op-doc"],
-            "BGVOps.md",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    dialect = "BGV",
+    kind = "op",
     td_file = "BGVOps.td",
     deps = [
-        ":dialect_inc_gen",
         ":td_files",
         "@heir//lib/Dialect/LWE/IR:td_files",
-        "@llvm-project//mlir:PolynomialTdFiles",
+        "@heir//lib/Dialect/Polynomial/IR:td_files",
+    ],
+)
+
+add_heir_dialect_library(
+    name = "attributes_inc_gen",
+    dialect = "BGV",
+    kind = "attribute",
+    td_file = "BGVAttributes.td",
+    deps = [
+        ":td_files",
     ],
 )

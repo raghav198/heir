@@ -1,4 +1,5 @@
-load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library", "td_library")
+load("@heir//lib/Dialect:dialect.bzl", "add_heir_dialect_library")
+load("@llvm-project//mlir:tblgen.bzl", "td_library")
 
 package(
     default_applicable_licenses = ["@heir//:license"],
@@ -19,10 +20,13 @@ cc_library(
         ":dialect_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
+        "@heir//lib/Dialect:FHEHelpers",
         "@heir//lib/Dialect/LWE/IR:Dialect",
+        "@heir//lib/Utils/Tablegen:AsmInterfaces",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:InferTypeOpInterface",
+        "@llvm-project//mlir:Support",
     ],
 )
 
@@ -33,92 +37,42 @@ td_library(
         "OpenfheOps.td",
         "OpenfheTypes.td",
     ],
+    includes = ["../../../.."],
     deps = [
+        "@heir//lib/Utils/Tablegen:td_files",
         "@llvm-project//mlir:BuiltinDialectTdFiles",
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
         "@llvm-project//mlir:OpBaseTdFiles",
     ],
 )
 
-gentbl_cc_library(
+add_heir_dialect_library(
     name = "dialect_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-dialect-decls",
-            ],
-            "OpenfheDialect.h.inc",
-        ),
-        (
-            [
-                "-gen-dialect-defs",
-            ],
-            "OpenfheDialect.cpp.inc",
-        ),
-        (
-            [
-                "-gen-dialect-doc",
-            ],
-            "OpenfheDialect.md",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    dialect = "Openfhe",
+    kind = "dialect",
     td_file = "OpenfheDialect.td",
     deps = [
         ":td_files",
     ],
 )
 
-gentbl_cc_library(
+add_heir_dialect_library(
     name = "types_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-typedef-decls",
-            ],
-            "OpenfheTypes.h.inc",
-        ),
-        (
-            [
-                "-gen-typedef-defs",
-            ],
-            "OpenfheTypes.cpp.inc",
-        ),
-        (
-            ["-gen-typedef-doc"],
-            "OpenfheTypes.md",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    dialect = "Openfhe",
+    kind = "type",
     td_file = "OpenfheTypes.td",
     deps = [
-        ":dialect_inc_gen",
         ":td_files",
     ],
 )
 
-gentbl_cc_library(
+add_heir_dialect_library(
     name = "ops_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-op-decls"],
-            "OpenfheOps.h.inc",
-        ),
-        (
-            ["-gen-op-defs"],
-            "OpenfheOps.cpp.inc",
-        ),
-        (
-            ["-gen-op-doc"],
-            "OpenfheOps.md",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    dialect = "Openfhe",
+    kind = "op",
     td_file = "OpenfheOps.td",
     deps = [
-        ":dialect_inc_gen",
         ":td_files",
-        ":types_inc_gen",
         "@heir//lib/Dialect/LWE/IR:td_files",
     ],
 )

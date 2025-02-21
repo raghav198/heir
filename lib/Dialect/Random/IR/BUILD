@@ -1,6 +1,7 @@
 # Random dialect
 
-load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library", "td_library")
+load("@heir//lib/Dialect:dialect.bzl", "add_heir_dialect_library")
+load("@llvm-project//mlir:tblgen.bzl", "td_library")
 
 package(
     default_applicable_licenses = ["@heir//:license"],
@@ -41,7 +42,7 @@ td_library(
     # include from the heir-root to enable fully-qualified include-paths
     includes = ["../../../.."],
     deps = [
-        "@heir//lib/DRR",
+        "@heir//lib/Utils/DRR",
         "@llvm-project//mlir:BuiltinDialectTdFiles",
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
         "@llvm-project//mlir:OpBaseTdFiles",
@@ -49,96 +50,42 @@ td_library(
     ],
 )
 
-gentbl_cc_library(
-    name = "enums_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-enum-decls"],
-            "RandomEnums.h.inc",
-        ),
-        (
-            ["--gen-enum-defs"],
-            "RandomEnums.cpp.inc",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
-    td_file = "RandomEnums.td",
-    deps = [
-        ":td_files",
-        "@llvm-project//mlir:PolynomialTdFiles",
-    ],
-)
-
-gentbl_cc_library(
+add_heir_dialect_library(
     name = "dialect_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-dialect-decls",
-            ],
-            "RandomDialect.h.inc",
-        ),
-        (
-            [
-                "-gen-dialect-defs",
-            ],
-            "RandomDialect.cpp.inc",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    dialect = "Random",
+    kind = "dialect",
     td_file = "RandomDialect.td",
     deps = [
         ":td_files",
     ],
 )
 
-gentbl_cc_library(
-    name = "ops_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-op-decls"],
-            "RandomOps.h.inc",
-        ),
-        (
-            ["-gen-op-defs"],
-            "RandomOps.cpp.inc",
-        ),
-        (
-            ["-gen-op-doc"],
-            "RandomOps.md",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
-    td_file = "RandomOps.td",
+add_heir_dialect_library(
+    name = "enums_inc_gen",
+    dialect = "Random",
+    kind = "enum",
+    td_file = "RandomEnums.td",
     deps = [
-        ":dialect_inc_gen",
         ":td_files",
-        "@llvm-project//mlir:PolynomialTdFiles",
     ],
 )
 
-gentbl_cc_library(
+add_heir_dialect_library(
     name = "types_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-typedef-decls"],
-            "RandomTypes.h.inc",
-        ),
-        (
-            ["--gen-typedef-defs"],
-            "RandomTypes.cpp.inc",
-        ),
-        (
-            ["-gen-typedef-doc"],
-            "RandomTypes.md",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    dialect = "Random",
+    kind = "type",
     td_file = "RandomTypes.td",
     deps = [
-        ":dialect_inc_gen",
-        ":enums_inc_gen",
         ":td_files",
-        "@llvm-project//mlir:PolynomialTdFiles",
+    ],
+)
+
+add_heir_dialect_library(
+    name = "ops_inc_gen",
+    dialect = "Random",
+    kind = "op",
+    td_file = "RandomOps.td",
+    deps = [
+        ":td_files",
     ],
 )

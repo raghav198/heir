@@ -1,4 +1,4 @@
-load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
+load("@heir//lib/Transforms:transforms.bzl", "add_heir_transforms")
 
 package(
     default_applicable_licenses = ["@heir//:license"],
@@ -25,11 +25,14 @@ cc_library(
     ],
     deps = [
         ":pass_inc_gen",
-        "@heir//lib/Analysis/MulDepthAnalysis",
+        "@heir//lib/Dialect/BGV/IR:Dialect",
+        "@heir//lib/Dialect/LWE/IR:Dialect",
+        "@heir//lib/Dialect/Mgmt/IR:Dialect",
+        "@heir//lib/Dialect/ModArith/IR:Dialect",
         "@heir//lib/Dialect/Openfhe/IR:Dialect",
+        "@heir//lib/Dialect/RNS/IR:Dialect",
+        "@heir//lib/Utils:TransformUtils",
         "@llvm-project//llvm:Support",
-        "@llvm-project//mlir:Analysis",
-        "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
@@ -37,25 +40,8 @@ cc_library(
     ],
 )
 
-gentbl_cc_library(
-    name = "pass_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-pass-decls",
-                "-name=Openfhe",
-            ],
-            "Passes.h.inc",
-        ),
-        (
-            ["-gen-pass-doc"],
-            "OpenfhePasses.md",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
+add_heir_transforms(
+    header_filename = "Passes.h.inc",
+    pass_name = "Openfhe",
     td_file = "Passes.td",
-    deps = [
-        "@llvm-project//mlir:OpBaseTdFiles",
-        "@llvm-project//mlir:PassBaseTdFiles",
-    ],
 )

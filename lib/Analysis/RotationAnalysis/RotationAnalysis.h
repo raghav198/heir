@@ -1,8 +1,15 @@
 #ifndef LIB_ANALYSIS_ROTATIONANALYSIS_ROTATIONANALYSIS_H_
 #define LIB_ANALYSIS_ROTATIONANALYSIS_ROTATIONANALYSIS_H_
 
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <set>
+#include <vector>
 
+#include "llvm/include/llvm/Support/Casting.h"             // from @llvm-project
 #include "llvm/include/llvm/Support/Debug.h"               // from @llvm-project
 #include "mlir/include/mlir/Analysis/DataFlowFramework.h"  // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinTypes.h"             // from @llvm-project
@@ -57,13 +64,19 @@ class PartialReduction {
 
   Value getRoot() const { return root; }
 
+  const SmallVector<Value> &getSavedValues() const { return savedValues; }
+
   void print(raw_ostream &os) const {
     os << "{ opName: " << (opName.has_value() ? opName->getStringRef() : "None")
        << "; " << " tensor: " << tensor << "; " << "rotations: [";
     for (auto index : accessedIndices) {
       os << index << ", ";
     }
-    os << "]; root: " << root << "; }";
+    os << "]; root: " << root << "; savedValues: [";
+    for (auto value : savedValues) {
+      os << value << ", ";
+    }
+    os << "]; }";
   }
 
   // Construct a "leaf" of a reduction, i.e., a PartialReduction that represents
@@ -89,6 +102,11 @@ class PartialReduction {
   // like {1, 2, 3, ...} rather than {1, 1, 1, ...}
   static PartialReduction rotate(const PartialReduction &lhs,
                                  const int64_t shift, Value result) {
+    // only tensor can rotate
+    assert(lhs.savedValues.empty() &&
+           "Internal state of RotationAnalysis is broken; tensor having saved "
+           "value should be impossible");
+
     LLVM_DEBUG({
       llvm::dbgs() << "Rotating\n\t";
       lhs.print(llvm::dbgs());
@@ -178,11 +196,69 @@ class PartialReduction {
     for (auto index : rhs.accessedIndices) {
       merged.addRotation(index);
     }
+    for (auto value : lhs.savedValues) {
+      merged.savedValues.push_back(value);
+    }
+    for (auto value : rhs.savedValues) {
+      merged.savedValues.push_back(value);
+    }
     LLVM_DEBUG({
       llvm::dbgs() << "Joining\n\t";
       lhs.print(llvm::dbgs());
       llvm::dbgs() << " and\n\t";
       rhs.print(llvm::dbgs());
+      llvm::dbgs() << " to get\n\t";
+      merged.print(llvm::dbgs());
+      llvm::dbgs() << "\n";
+    });
+    return merged;
+  }
+
+  // Determine if a Value is legal to join at an op whose
+  // OperationName is given.
+  static bool canSave(const PartialReduction &lhs, Value rhs,
+                      OperationName opName) {
+    // If the lhs op is not set, then any op is legal.
+    if (lhs.opName.has_value() && *lhs.opName != opName) {
+      return false;
+    }
+    // Only support saving scalar value.
+    // If the saved rhs is a tensor, it might get rotated alongside
+    // the reduction tree later.
+    //
+    // TODO(#522): if no rotation later then a tensor can be saved.
+    // This can be implemented via checking in a canRotate method.
+    //
+    // Note that for the full rotation case, the new PartialReduction
+    // created from the result tensor in analysis would suffice
+    if (mlir::isa<RankedTensorType>(rhs.getType())) {
+      return false;
+    }
+    return true;
+  }
+
+  // Save value within a partial reduction. This assumes the lhs and rhs have
+  // already been checked to have compatible opNames via canSave.
+  static PartialReduction save(const PartialReduction &lhs, Value rhs,
+                               Value newRoot, OperationName opName) {
+    assert(!lhs.accessedIndices.empty() &&
+           "Internal state of RotationAnalysis is broken; empty rotation sets "
+           "should be impossible");
+
+    PartialReduction merged;
+    merged.tensor = lhs.tensor;
+    merged.root = newRoot;
+    merged.opName = opName;
+    for (auto index : lhs.accessedIndices) {
+      merged.addRotation(index);
+    }
+    merged.savedValues = lhs.savedValues;
+    merged.savedValues.push_back(rhs);
+    LLVM_DEBUG({
+      llvm::dbgs() << "Saving\n\t";
+      rhs.print(llvm::dbgs());
+      llvm::dbgs() << " inside\n\t";
+      lhs.print(llvm::dbgs());
       llvm::dbgs() << " to get\n\t";
       merged.print(llvm::dbgs());
       llvm::dbgs() << "\n";
@@ -214,6 +290,14 @@ class PartialReduction {
   // For now we use std::set which is implemented as a binary tree and ordered
   // by the index values.
   std::set<int64_t> accessedIndices;
+
+  // The list of constant Value encountered by the reduction so far.
+  //
+  // constant Value in the reduction tree should be saved and applied later
+  // on the reduced final result.
+  // Use SmallVector instead of std::set as there might be the same Value saved
+  // repeatedly
+  SmallVector<Value> savedValues;
 };
 
 inline raw_ostream &operator<<(raw_ostream &os, const PartialReduction &v) {
@@ -221,9 +305,15 @@ inline raw_ostream &operator<<(raw_ostream &os, const PartialReduction &v) {
   return os;
 }
 
+inline bool isOneDimTensor(Type type) {
+  auto tensorType = mlir::dyn_cast<RankedTensorType>(type);
+  return tensorType && tensorType.getRank() == 1;
+};
+
 /// An analysis that identifies, for each tensor-typed SSA value, the set of
 /// partial reductions of associative, commutative binary arithmetic operations
 /// that reduce it to a scalar via tensor_ext.rotate ops.
+/// TODO(#924): Currently, this analysis only supports one dimensional tensors.
 class RotationAnalysis {
  public:
   // The constructor requires a DataFlowSolver initialized with a sparse
@@ -241,9 +331,8 @@ class RotationAnalysis {
 
   /// Add a tensor value as the start of a new reduction to the internal
   /// reduction mappings.
-  void initializeFromValueIfTensor(Value value) {
-    if (RankedTensorType tensorType =
-            mlir::dyn_cast<RankedTensorType>(value.getType())) {
+  void initializeFromValueIfOneDimTensor(Value value) {
+    if (isOneDimTensor(value.getType())) {
       addPartialReduction(PartialReduction::initializeFromValue(value));
     }
   }

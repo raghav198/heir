@@ -1,18 +1,33 @@
 #include "lib/Analysis/SecretnessAnalysis/SecretnessAnalysis.h"
 
+#include <algorithm>
+#include <cassert>
+#include <functional>
+#include <string>
+
+#include "lib/Analysis/Utils.h"
+#include "lib/Dialect/Secret/IR/SecretDialect.h"
 #include "lib/Dialect/Secret/IR/SecretOps.h"
 #include "lib/Dialect/Secret/IR/SecretTypes.h"
-#include "mlir/include/mlir/IR/Operation.h"  // from @llvm-project
-#include "mlir/include/mlir/IR/Value.h"      // from @llvm-project
-#include "mlir/include/mlir/IR/Visitors.h"   // from @llvm-project
-#include "mlir/include/mlir/Support/LLVM.h"  // from @llvm-project
+#include "llvm/include/llvm/Support/Casting.h"             // from @llvm-project
+#include "mlir/include/mlir/Analysis/DataFlowFramework.h"  // from @llvm-project
+#include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"     // from @llvm-project
+#include "mlir/include/mlir/IR/Attributes.h"               // from @llvm-project
+#include "mlir/include/mlir/IR/BuiltinAttributes.h"        // from @llvm-project
+#include "mlir/include/mlir/IR/OpDefinition.h"             // from @llvm-project
+#include "mlir/include/mlir/IR/Operation.h"                // from @llvm-project
+#include "mlir/include/mlir/IR/Value.h"                    // from @llvm-project
+#include "mlir/include/mlir/IR/ValueRange.h"               // from @llvm-project
+#include "mlir/include/mlir/IR/Visitors.h"                 // from @llvm-project
+#include "mlir/include/mlir/Interfaces/CallInterfaces.h"   // from @llvm-project
+#include "mlir/include/mlir/Support/LLVM.h"                // from @llvm-project
 
 namespace mlir {
 namespace heir {
 
 void SecretnessAnalysis::setToEntryState(SecretnessLattice *lattice) {
   auto operand = lattice->getAnchor();
-  bool isSecret = isa<secret::SecretType>(operand.getType());
+  bool secretness = isa<secret::SecretType>(operand.getType());
 
   Operation *operation = nullptr;
   // Get defining operation for operand
@@ -27,10 +42,38 @@ void SecretnessAnalysis::setToEntryState(SecretnessLattice *lattice) {
   if (auto genericOp = dyn_cast<secret::GenericOp>(*operation)) {
     if (OpOperand *genericOperand =
             genericOp.getOpOperandForBlockArgument(operand)) {
-      isSecret = isa<secret::SecretType>(genericOperand->get().getType());
+      secretness = isa<secret::SecretType>(genericOperand->get().getType());
     }
   }
-  propagateIfChanged(lattice, lattice->join(Secretness(isSecret)));
+
+  // If operand is defined by a func.func operation,
+  // check if the operand is either of secret type or annotated with
+  // {secret.secret}
+  if (auto funcOp = dyn_cast<func::FuncOp>(*operation)) {
+    // identify which function argument the operand corresponds to
+    auto blockArgs = funcOp.getBody().getArguments();
+    int index = std::find(blockArgs.begin(), blockArgs.end(), operand) -
+                blockArgs.begin();
+
+    // Check if it has secret type
+    secretness = isa<secret::SecretType>(funcOp.getArgumentTypes()[index]);
+
+    // check if it is annotated as {secret.secret}
+    auto attrs = funcOp.getArgAttrs();
+    if (attrs) {
+      auto arr = attrs->getValue();
+      if (auto dictattr = dyn_cast<DictionaryAttr>(arr[index])) {
+        for (auto attr : dictattr) {
+          secretness =
+              secretness ||
+              attr.getName() == secret::SecretDialect::kArgSecretAttrName.str();
+          break;
+        }
+      }
+    }
+  }
+
+  propagateIfChanged(lattice, lattice->join(Secretness(secretness)));
 }
 
 LogicalResult SecretnessAnalysis::visitOperation(
@@ -71,6 +114,146 @@ LogicalResult SecretnessAnalysis::visitOperation(
     propagateIfChanged(result, result->join(resultSecretness));
   }
   return mlir::success();
+}
+
+void SecretnessAnalysis::visitExternalCall(
+    CallOpInterface call, ArrayRef<const SecretnessLattice *> argumentLattices,
+    ArrayRef<SecretnessLattice *> resultLattices) {
+  auto callback = std::bind(&SecretnessAnalysis::propagateIfChangedWrapper,
+                            this, std::placeholders::_1, std::placeholders::_2);
+  ::mlir::heir::visitExternalCall<Secretness, SecretnessLattice>(
+      call, argumentLattices, resultLattices, callback);
+}
+
+void annotateSecretness(Operation *top, DataFlowSolver *solver, bool verbose) {
+  // Attribute "Printing" Helper
+  auto getAttribute =
+      [&](const SecretnessLattice *secretnessLattice) -> NamedAttribute {
+    if (!secretnessLattice) {
+      return {secret::SecretDialect::kArgMissingAttrName,
+              UnitAttr::get(top->getContext())};
+    }
+    if (!secretnessLattice->getValue().isInitialized()) {
+      return {secret::SecretDialect::kArgUnknownAttrName,
+              UnitAttr::get(top->getContext())};
+    }
+    if (secretnessLattice->getValue().getSecretness()) {
+      return {secret::SecretDialect::kArgSecretAttrName,
+              UnitAttr::get(top->getContext())};
+    }
+    return {secret::SecretDialect::kArgPublicAttrName,
+            UnitAttr::get(top->getContext())};
+  };
+
+  // Add an attribute to the operations to show determined secretness
+  top->walk([&](Operation *op) {
+    // Custom Handling for `func.func`, which uses special attributes
+    if (auto func = llvm::dyn_cast<func::FuncOp>(op)) {
+      if (func.isDeclaration()) {
+        return;
+      }
+      // Arguments
+      for (unsigned i = 0; i < func.getNumArguments(); ++i) {
+        auto arg = func.getArgument(i);
+        // Do not annotate if already of type !secret.secret<..>
+        if (!verbose && llvm::isa<secret::SecretType>(arg.getType())) continue;
+        auto *secretnessLattice = solver->lookupState<SecretnessLattice>(arg);
+        if (verbose || isSecret(secretnessLattice)) {
+          auto attr = getAttribute(secretnessLattice);
+          func.setArgAttr(i, attr.getName(), attr.getValue());
+        }
+      }
+
+      // Results
+      auto *ret = func.getFunctionBody().back().getTerminator();
+      assert(ret->getNumOperands() == func.getFunctionType().getNumResults() &&
+             "Number of returned values does not match function type");
+      for (unsigned i = 0; i < func.getFunctionType().getNumResults(); ++i) {
+        auto res = ret->getOpOperand(i).get();
+        // Do not annotate if already of type !secret.secret<..>
+        if (!verbose && llvm::isa<secret::SecretType>(res.getType())) continue;
+        auto *secretnessLattice = solver->lookupState<SecretnessLattice>(res);
+        if (verbose || isSecret(secretnessLattice)) {
+          auto attr = getAttribute(secretnessLattice);
+          func.setResultAttr(i, attr.getName(), attr.getValue());
+        }
+      }
+    } else {
+      // Default Handling for all other operations
+      SmallVector<NamedAttribute, 1> attributes;
+      bool isTerminator = op->hasTrait<OpTrait::IsTerminator>();
+      if (isTerminator) {
+        // Terminators (e.g., func.return, affine.yield) do not have mlir
+        // op results, but do still have logical "results" (mlir operands)
+        for (auto o : op->getOperands()) {
+          // Do not annotate if already of type !secret.secret<..>
+          if (!verbose && llvm::isa<secret::SecretType>(o.getType())) continue;
+          auto *secretnessLattice = solver->lookupState<SecretnessLattice>(o);
+          if (verbose || isSecret(secretnessLattice))
+            attributes.append({getAttribute(secretnessLattice)});
+        }
+      } else {  // Non-Terminators, so consider op results
+        for (auto o : op->getResults()) {
+          // Do not annotate if already of type !secret.secret<..>
+          if (!verbose && llvm::isa<secret::SecretType>(o.getType())) continue;
+          auto *secretnessLattice = solver->lookupState<SecretnessLattice>(o);
+          if (verbose || isSecret(secretnessLattice))
+            attributes.append({getAttribute(secretnessLattice)});
+        }
+      }
+      if (attributes.size() == 1) {
+        // Do not annotate if already of type !secret.secret<..>
+        if (verbose || !llvm::isa<secret::SecretType>(
+                           isTerminator ? op->getOperand(0).getType()
+                                        : op->getResult(0).getType()))
+          op->setAttr(attributes[0].getName(), attributes[0].getValue());
+      } else if (!attributes.empty()) {
+        // Here, we emit also for !secret.secret<>) to preserve the mapping
+        SmallVector<Attribute> dicts;
+        for (auto a : attributes) {
+          auto dict = DictionaryAttr::get(top->getContext(), a);
+          dicts.push_back(dict);
+        }
+        auto arr = ArrayAttr::get(top->getContext(), dicts);
+        op->setAttr("secretness", arr);
+      }
+    }
+
+    return;
+  });
+}
+
+bool isSecret(Value value, DataFlowSolver *solver) {
+  auto *lattice = solver->lookupState<SecretnessLattice>(value);
+  return isSecret(lattice);
+}
+
+bool isSecret(const SecretnessLattice *lattice) {
+  if (!lattice) {
+    return false;
+  }
+  if (!lattice->getValue().isInitialized()) {
+    return false;
+  }
+  return lattice->getValue().getSecretness();
+}
+
+bool isSecret(ValueRange values, DataFlowSolver *solver) {
+  if (values.empty()) {
+    return false;
+  }
+  return std::all_of(values.begin(), values.end(),
+                     [&](Value value) { return isSecret(value, solver); });
+}
+
+void getSecretOperands(Operation *op,
+                       SmallVectorImpl<OpOperand *> &secretOperands,
+                       DataFlowSolver *solver) {
+  for (auto &operand : op->getOpOperands()) {
+    if (isSecret(operand.get(), solver)) {
+      secretOperands.push_back(&operand);
+    }
+  }
 }
 
 }  // namespace heir

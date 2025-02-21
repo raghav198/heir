@@ -2,7 +2,7 @@
 #define LIB_DIALECT_LWE_IR_LWETRAITS_H_
 
 #include "lib/Dialect/LWE/IR/LWETypes.h"
-#include "mlir/include/mlir/Dialect/Polynomial/IR/PolynomialAttributes.h"  // from @llvm-project
+#include "lib/Dialect/Polynomial/IR/PolynomialAttributes.h"
 #include "mlir/include/mlir/IR/OpDefinition.h"        // from @llvm-project
 #include "mlir/include/mlir/IR/Operation.h"           // from @llvm-project
 #include "mlir/include/mlir/Support/LLVM.h"           // from @llvm-project
@@ -17,30 +17,30 @@ class SameOperandsAndResultRings
     : public OpTrait::TraitBase<ConcreteType, SameOperandsAndResultRings> {
  public:
   static LogicalResult verifyTrait(Operation *op) {
-    ::mlir::polynomial::RingAttr rings = nullptr;
+    ::mlir::heir::polynomial::RingAttr rings = nullptr;
     for (auto rTy : op->getResultTypes()) {
-      auto ct = dyn_cast<lwe::RLWECiphertextType>(rTy);
+      auto ct = dyn_cast<lwe::NewLWECiphertextType>(rTy);
       if (!ct) continue;
       if (rings == nullptr) {
-        rings = ct.getRlweParams().getRing();
+        rings = ct.getCiphertextSpace().getRing();
         continue;
       }
-      if (rings != ct.getRlweParams().getRing()) {
+      if (rings != ct.getCiphertextSpace().getRing()) {
         return op->emitOpError()
                << "requires all operands and results to have the same rings";
       }
     }
 
     for (auto oTy : op->getOperandTypes()) {
-      auto ct = dyn_cast<lwe::RLWECiphertextType>(oTy);
+      auto ct = dyn_cast<lwe::NewLWECiphertextType>(oTy);
       if (!ct) continue;  // Check only ciphertexts
 
       if (rings == nullptr) {
-        rings = ct.getRlweParams().getRing();
+        rings = ct.getCiphertextSpace().getRing();
         continue;
       }
 
-      if (rings != ct.getRlweParams().getRing()) {
+      if (rings != ct.getCiphertextSpace().getRing()) {
         return op->emitOpError()
                << "requires all operands and results to have the same rings";
       }

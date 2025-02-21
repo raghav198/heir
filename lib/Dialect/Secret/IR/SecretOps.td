@@ -4,6 +4,7 @@
 include "SecretDialect.td"
 include "SecretTypes.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -110,7 +111,8 @@ def Secret_YieldOp : Secret_Op<"yield", [
 
 def Secret_GenericOp : Secret_Op<"generic", [
   SingleBlock,
-  SingleBlockImplicitTerminator<"YieldOp">
+  SingleBlockImplicitTerminator<"YieldOp">,
+  OpAsmOpInterface
 ]> {
   let summary = "Lift a plaintext computation to operate on secrets.";
   let description = [{
@@ -242,6 +244,86 @@ def Secret_GenericOp : Secret_Op<"generic", [
 
     void inlineInPlaceDroppingSecrets(PatternRewriter &rewriter) {
       inlineInPlaceDroppingSecrets(rewriter, getOperands());
+    }
+
+    //===------------------------------------------------------------------===//
+    // Argument Attributes
+    //===------------------------------------------------------------------===//
+
+    /// Return the specified attribute, if present, for the argument at 'index',
+    /// null otherwise.
+    Attribute getArgAttr(unsigned index, StringRef name) {
+      std::string argName = "arg" + std::to_string(index);
+      auto argDict = this->getOperation()->getAttrOfType<DictionaryAttr>(argName);
+      return argDict ? argDict.get(name) : nullptr;
+    }
+
+    /// If the an attribute exists with the specified name, change it to the new
+    /// value. Otherwise, add a new attribute with the specified name/value.
+    void setArgAttr(unsigned index, StringRef name, Attribute value) {
+      llvm::MapVector<StringAttr, Attribute> newAttrMap;
+      newAttrMap.insert({StringAttr::get(getContext(), name), value});
+
+      std::string argName = "arg" + std::to_string(index);
+      auto argDict = this->getOperation()->getAttrOfType<DictionaryAttr>(argName);
+      if (argDict) {
+        for (const auto &attr : argDict) {
+          newAttrMap.insert({attr.getName(), attr.getValue()});
+        }
+      }
+
+      auto newAttrs = llvm::to_vector(llvm::map_range(
+        newAttrMap, [](std::pair<StringAttr, Attribute> attrPair) {
+        return NamedAttribute(attrPair.first, attrPair.second);
+      }));
+
+      this->getOperation()->setAttr(argName, DictionaryAttr::get(getContext(), newAttrs));
+    }
+
+    // remove the specified attribute, if present, for the argument at 'index',
+    // return the removed attribute, null otherwise.
+    Attribute removeArgAttr(unsigned index, StringRef name) {
+      std::string argName = "arg" + std::to_string(index);
+      auto argDict = this->getOperation()->getAttrOfType<DictionaryAttr>(argName);
+      if (!argDict)
+        return nullptr;
+
+      auto attr = argDict.get(name);
+      if (!attr)
+        return nullptr;
+
+      SmallVector<NamedAttribute> newAttrs;
+      for (auto &attr : argDict) {
+        if (attr.getName().getValue() != name)
+          newAttrs.push_back(attr);
+      }
+
+      if (newAttrs.empty()) {
+        this->getOperation()->removeAttr(argName);
+      } else {
+        this->getOperation()->setAttr(argName, DictionaryAttr::get(getContext(), newAttrs));
+      }
+      return attr;
+    }
+
+    //===------------------------------------------------------------------===//
+    // OpAsmOpInterface Methods
+    //===------------------------------------------------------------------===//
+
+    void getAsmBlockArgumentNames(::mlir::Region &region,
+                                  ::mlir::OpAsmSetValueNameFn setNameFn) {
+      for (auto &block : region) {
+        for (auto arg : block.getArguments()) {
+          setNameFn(arg, "input" + std::to_string(arg.getArgNumber()));
+        }
+      }
+    }
+
+    void getAsmBlockNames(::mlir::OpAsmSetBlockNameFn setNameFn) {
+      // single block
+      for (auto &block : getRegion().getBlocks()) {
+        setNameFn(&block, "body");
+      }
     }
   }];
 

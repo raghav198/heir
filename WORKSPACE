@@ -33,6 +33,125 @@ load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
 
 bazel_skylib_workspace()
 
+# Depend on a hermetic python version
+new_git_repository(
+    name = "rules_python",
+    commit = "9ffb1ecd9b4e46d2a0bca838ac80d7128a352f9f",  # v0.23.1
+    remote = "https://github.com/bazelbuild/rules_python.git",
+)
+
+load("@rules_python//python:repositories.bzl", "python_register_toolchains")
+
+python_register_toolchains(
+    name = "python3_10",
+    # Available versions are listed at
+    # https://github.com/bazelbuild/rules_python/blob/main/python/versions.bzl
+    python_version = "3.10",
+)
+
+load("@python3_10//:defs.bzl", "interpreter")
+load("@rules_python//python:pip.bzl", "pip_parse")
+
+# Download the Go rules.
+http_archive(
+    name = "io_bazel_rules_go",
+    integrity = "sha256-M6zErg9wUC20uJPJ/B3Xqb+ZjCPn/yxFF3QdQEmpdvg=",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.48.0/rules_go-v0.48.0.zip",
+        "https://github.com/bazelbuild/rules_go/releases/download/v0.48.0/rules_go-v0.48.0.zip",
+    ],
+)
+
+# Download Gazelle.
+http_archive(
+    name = "bazel_gazelle",
+    integrity = "sha256-12v3pg/YsFBEQJDfooN6Tq+YKeEWVhjuNdzspcvfWNU=",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.37.0/bazel-gazelle-v0.37.0.tar.gz",
+        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.37.0/bazel-gazelle-v0.37.0.tar.gz",
+    ],
+)
+
+load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies", "go_repository")
+
+# Load macros and repository rules.
+load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
+
+# Declare Go direct dependencies.
+go_repository(
+    name = "lattigo",
+    importpath = "github.com/tuneinsight/lattigo/v6",
+    sum = "h1:CyO07L4b+Dwi28eXcrQVZNqbfPT99ntzsoSsTX9syzI=",
+    version = "v6.1.0",
+)
+
+# Testing library for lattigo
+go_repository(
+    name = "com_github_stretchr_testify",
+    importpath = "github.com/stretchr/testify",
+    sum = "h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=",
+    version = "v1.10.0",
+)
+
+# Bigfloat for lattigo
+go_repository(
+    name = "com_github_altree_bigfloat",
+    importpath = "github.com/ALTree/bigfloat",
+    sum = "h1:DG4UyTVIujioxwJc8Zj8Nabz1L1wTgQ/xNBSQDfdP3I=",
+    version = "v0.0.0-20220102081255-38c8b72a9924",
+)
+
+# Bigfloat for lattigo
+go_repository(
+    name = "com_github_davecgh_go_spew",
+    importpath = "github.com/davecgh/go-spew",
+    sum = "h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=",
+    version = "v1.1.1",
+)
+
+go_repository(
+    name = "in_gopkg_yaml_v3",
+    importpath = "gopkg.in/yaml.v3",
+    sum = "h1:dUUwHk2QECo/6vqA44rthZ8ie2QXMNeKRTHCNY2nXvo=",
+    version = "v3.0.0-20200313102051-9f266ea9e77c",
+)
+
+go_repository(
+    name = "org_golang_x_exp",
+    build_file_generation = "on",
+    importpath = "golang.org/x/exp",
+    sum = "h1:yqrTHse8TCMW1M1ZCP+VAR/l0kKxwaAIqN/il7x4voA=",
+    version = "v0.0.0-20250106191152-7588d65b2ba8",
+)
+
+# Declare indirect dependencies and register toolchains.
+go_rules_dependencies()
+
+go_register_toolchains(version = "1.23.1")
+
+gazelle_dependencies()
+
+## ortools needs to be loaded earlier so later rules can get access to its
+## patch files.
+git_repository(
+    name = "com_google_ortools",
+    commit = "ed94162b910fa58896db99191378d3b71a5313af",
+    remote = "https://github.com/google/or-tools.git",
+    shallow_since = "1726144997 +0200",
+)
+
+## Protobuf
+git_repository(
+    name = "com_google_protobuf",
+    commit = "2434ef2adf0c74149b9d547ac5fb545a1ff8b6b5",
+    remote = "https://github.com/protocolbuffers/protobuf.git",
+)
+
+# Load common dependencies.
+load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
+
+protobuf_deps()
+
 # LLVM is pinned to the same commit used in the Google monorepo, and then
 # imported into this workspace as a git repository. Then the build files
 # defined in the LLVM monorepo are overlaid using llvm_configure in the setup
@@ -102,31 +221,6 @@ http_archive(
     url = "https://github.com/google/benchmark/archive/refs/tags/v1.8.4.tar.gz",  # 2024-05-23
 )
 
-# googletest comes with abseil as @com_google_absl, see
-# https://github.com/google/googletest/blob/23f642ab2317c632d93326c65efd44671c1d9985/googletest_deps.bzl
-load("@googletest//:googletest_deps.bzl", "googletest_deps")
-
-googletest_deps()
-
-# Depend on a hermetic python version
-new_git_repository(
-    name = "rules_python",
-    commit = "9ffb1ecd9b4e46d2a0bca838ac80d7128a352f9f",  # v0.23.1
-    remote = "https://github.com/bazelbuild/rules_python.git",
-)
-
-load("@rules_python//python:repositories.bzl", "python_register_toolchains")
-
-python_register_toolchains(
-    name = "python3_10",
-    # Available versions are listed at
-    # https://github.com/bazelbuild/rules_python/blob/main/python/versions.bzl
-    python_version = "3.10",
-)
-
-load("@python3_10//:defs.bzl", "interpreter")
-load("@rules_python//python:pip.bzl", "pip_parse")
-
 pip_parse(
     name = "heir_pip_deps",
     python_interpreter_target = interpreter,
@@ -134,6 +228,17 @@ pip_parse(
 )
 
 load("@heir_pip_deps//:requirements.bzl", "install_deps")
+
+install_deps()
+
+# separate pip deps for heir_py
+pip_parse(
+    name = "heir_py_pip_deps",
+    python_interpreter_target = interpreter,
+    requirements_lock = "//heir_py:requirements.txt",
+)
+
+load("@heir_py_pip_deps//:requirements.bzl", "install_deps")  # buildifier: disable=load
 
 install_deps()
 
@@ -210,12 +315,6 @@ git_repository(
     remote = "https://github.com/bazelbuild/platforms.git",
 )
 
-git_repository(
-    name = "rules_proto",
-    commit = "3f1ab99b718e3e7dd86ebdc49c580aa6a126b1cd",
-    remote = "https://github.com/bazelbuild/rules_proto.git",
-)
-
 ## ZLIB
 # Would be nice to use llvm-zlib instead here.
 new_git_repository(
@@ -229,15 +328,16 @@ new_git_repository(
 git_repository(
     name = "com_google_re2",
     remote = "https://github.com/google/re2.git",
-    tag = "2023-07-01",
+    repo_mapping = {"@abseil-cpp": "@com_google_absl"},
+    tag = "2024-04-01",
 )
 
 ## Abseil-cpp
 git_repository(
     name = "com_google_absl",
-    commit = "c2435f8342c2d0ed8101cb43adfd605fdc52dca2",
+    commit = "4447c7562e3bc702ade25105912dce503f0c4010",
     patch_args = ["-p1"],
-    patches = ["@com_google_ortools//patches:abseil-cpp-20230125.3.patch"],
+    patches = ["@com_google_ortools//patches:abseil-cpp-20240722.0.patch"],
     remote = "https://github.com/abseil/abseil-cpp.git",
 )
 
@@ -248,32 +348,17 @@ new_git_repository(
     remote = "https://github.com/abseil/abseil-py",
 )
 
-## Protobuf
-git_repository(
-    name = "com_google_protobuf",
-    # there's a patch for the CMake build in protobuf, ignoring
-    # patches = ["@com_google_ortools//patches:protobuf-v23.3.patch"],
-    commit = "4dd15db6eb3955745f379d28fb4a2fcfb6753de3",
-    patch_args = ["-p1"],
-    remote = "https://github.com/protocolbuffers/protobuf.git",
-)
-
-# Load common dependencies.
-load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
-
-protobuf_deps()
-
 ## Solvers
 http_archive(
     name = "glpk",
-    build_file = "@com_google_ortools//bazel:glpk.BUILD",
+    build_file = "@com_google_ortools//bazel:glpk.BUILD.bazel",
     sha256 = "4a1013eebb50f728fc601bdd833b0b2870333c3b3e5a816eeba921d95bec6f15",
     url = "http://ftp.gnu.org/gnu/glpk/glpk-5.0.tar.gz",
 )
 
 http_archive(
     name = "bliss",
-    build_file = "@com_google_ortools//bazel:bliss.BUILD",
+    build_file = "@com_google_ortools//bazel:bliss.BUILD.bazel",
     patches = ["@com_google_ortools//bazel:bliss-0.73.patch"],
     sha256 = "f57bf32804140cad58b1240b804e0dbd68f7e6bf67eba8e0c0fa3a62fd7f0f84",
     url = "https://github.com/google/or-tools/releases/download/v9.0/bliss-0.73.zip",
@@ -282,10 +367,10 @@ http_archive(
 
 new_git_repository(
     name = "scip",
-    build_file = "@com_google_ortools//bazel:scip.BUILD",
-    commit = "62fab8a2e3708f3452fad473a6f48715c367316b",
+    build_file = "@com_google_ortools//bazel:scip.BUILD.bazel",
+    commit = "7205bedd942f87faeb9a0552839710941d1ffc2c",
     patch_args = ["-p1"],
-    patches = ["@com_google_ortools//bazel:scip.patch"],
+    patches = ["@com_google_ortools//bazel:scip-v900.patch"],
     remote = "https://github.com/scipopt/scip.git",
 )
 
@@ -313,22 +398,6 @@ git_repository(
     remote = "https://github.com/ERGO-Code/HiGHS.git",
 )
 
-# ## Swig support
-# # pcre source code repository
-# new_git_repository(
-#     name = "pcre2",
-#     build_file = "@com_google_ortools//bazel:pcre2.BUILD",
-#     remote = "https://github.com/PCRE2Project/pcre2.git",
-#     tag = "pcre2-10.42",
-# )
-
-git_repository(
-    name = "com_google_ortools",
-    commit = "1d696f9108a0ebfd99feb73b9211e2f5a6b0812b",
-    remote = "https://github.com/google/or-tools.git",
-    shallow_since = "1647023481 +0100",
-)
-
 # OpenFHE backend and dependencies
 git_repository(
     name = "cereal",
@@ -351,4 +420,11 @@ git_repository(
     commit = "94fd76a1d965cfde13f2a540d78ce64146fc2700",
     patches = ["@heir//bazel/openfhe:add_config_core.patch"],
     remote = "https://github.com/openfheorg/openfhe-development.git",
+)
+
+git_repository(
+    name = "pocketfft",
+    build_file = "//bazel/pocketfft:pocketfft.BUILD",
+    commit = "bb5bdb776c64819f66cb2205f78bef1581448628",
+    remote = "https://gitlab.mpcdf.mpg.de/mtr/pocketfft.git",
 )

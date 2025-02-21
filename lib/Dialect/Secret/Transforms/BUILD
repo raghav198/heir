@@ -51,8 +51,10 @@ cc_library(
     deps = [
         ":pass_inc_gen",
         "@heir//lib/Analysis/SecretnessAnalysis",
+        "@heir//lib/Dialect/Mgmt/IR:Dialect",
         "@heir//lib/Dialect/Secret/IR:SecretPatterns",
         "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:Analysis",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",

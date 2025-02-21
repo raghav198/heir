@@ -1,7 +1,11 @@
+# bazel output directories
 bazel-bin
 bazel-heir
 bazel-out
 bazel-testlogs
+
+# default cmake output directory
+build
 
 # Generated files by hugo
 docs/public/
@@ -11,13 +15,21 @@ docs/node_modules/
 .hugo_build.lock
 hugo_stats.json
 
-# for python dependencies
+# python
 venv
+**/dist/
+
+# heir_play
+scripts/jupyter/.ipynb_checkpoints/
+scripts/jupyter/heir-opt
+scripts/jupyter/heir-translate
+scripts/jupyter/abc
+scripts/jupyter/techmap.v
 
 # for rust codegen tests
 **/Cargo.lock
 tests/**/**/target/
-tests/tfhe_rust_bool/end_to_end_fpga/tfhe-rs
+tests/Examples/tfhe_rust_bool/fpga/tfhe-rs
 
 # vscode
 .vscode/**

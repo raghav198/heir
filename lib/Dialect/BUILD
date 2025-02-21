@@ -1,5 +1,6 @@
 # Built in HEIR declarations
 
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library", "td_library")
 
 package(
@@ -33,9 +34,20 @@ cc_library(
     hdrs = ["FHEHelpers.h"],
     deps = [
         "@heir//lib/Dialect/LWE/IR:Dialect",
-        "@llvm-project//llvm:Support",
+        "@heir//lib/Dialect/ModArith/IR:Dialect",
+        "@heir//lib/Dialect/RNS/IR:Dialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
+    ],
+)
+
+cc_library(
+    name = "ModuleAttributes",
+    srcs = ["ModuleAttributes.cpp"],
+    hdrs = ["ModuleAttributes.h"],
+    deps = [
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:IR",
     ],
 )
 
@@ -66,4 +78,9 @@ gentbl_cc_library(
     deps = [
         ":td_files",
     ],
+)
+
+bzl_library(
+    name = "dialect_bzl",
+    srcs = ["dialect.bzl"],
 )

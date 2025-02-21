@@ -1,41 +1,55 @@
 #include "lib/Target/OpenFhePke/OpenFheUtils.h"
 
-#include <string>
 #include <iostream>
+#include <string>
 
 #include "lib/Dialect/LWE/IR/LWETypes.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheTypes.h"
-#include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
-#include "mlir/include/mlir/IR/BuiltinTypes.h"          // from @llvm-project
-#include "mlir/include/mlir/IR/Operation.h"             // from @llvm-project
-#include "mlir/include/mlir/IR/Types.h"                 // from @llvm-project
-#include "mlir/include/mlir/IR/Value.h"                 // from @llvm-project
-#include "mlir/include/mlir/Support/LLVM.h"             // from @llvm-project
-#include "mlir/include/mlir/Support/LogicalResult.h"    // from @llvm-project
-#include "llvm/include/llvm/ADT/TypeSwitch.h"           // from @llvm-project
-#include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
-#include "llvm/include/llvm/Support/Debug.h"            // from @llvm-project
+#include "lib/Target/OpenFhePke/OpenFhePkeTemplates.h"
+#include "llvm/include/llvm/ADT/TypeSwitch.h"            // from @llvm-project
+#include "llvm/include/llvm/Support/Debug.h"             // from @llvm-project
+#include "llvm/include/llvm/Support/FormatVariadic.h"    // from @llvm-project
+#include "llvm/include/llvm/Support/raw_ostream.h"       // from @llvm-project
+#include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"   // from @llvm-project
+#include "mlir/include/mlir/IR/BuiltinTypeInterfaces.h"  // from @llvm-project
+#include "mlir/include/mlir/IR/BuiltinTypes.h"           // from @llvm-project
+#include "mlir/include/mlir/IR/Location.h"               // from @llvm-project
+#include "mlir/include/mlir/IR/Operation.h"              // from @llvm-project
+#include "mlir/include/mlir/IR/Types.h"                  // from @llvm-project
+#include "mlir/include/mlir/IR/Value.h"                  // from @llvm-project
+#include "mlir/include/mlir/Support/LLVM.h"              // from @llvm-project
+#include "mlir/include/mlir/Support/LogicalResult.h"     // from @llvm-project
 
 namespace mlir {
 namespace heir {
 namespace openfhe {
 
-FailureOr<std::string> convertType(Type type) {
+std::string getModulePrelude(OpenfheScheme scheme,
+                             OpenfheImportType importType) {
+  auto import = importType == OpenfheImportType::SOURCE_RELATIVE
+                    ? kSourceRelativeOpenfheImport
+                    : kInstallationRelativeOpenfheImport;
+  auto prelude = std::string(
+      llvm::formatv(kModulePreludeTemplate.data(),
+                    scheme == OpenfheScheme::CKKS ? "CKKS" : "BGV"));
+  return std::string(import) + prelude;
+}
+
+FailureOr<std::string> convertType(Type type, Location loc) {
   return llvm::TypeSwitch<Type &, FailureOr<std::string>>(type)
       // For now, these types are defined in the prelude as aliases.
       .Case<CryptoContextType>(
           [&](auto ty) { return std::string("CryptoContextT"); })
       .Case<CCParamsType>([&](auto ty) { return std::string("CCParamsT"); })
       .Case<BinFHEContextType>(
-        [&](auto ty) { return std::string("BinFHEContextT"); })
-      .Case<LWESchemeType>(
-        [&](auto ty) { return std::string("LWESchemeT"); })
+          [&](auto ty) { return std::string("BinFHEContextT"); })
+      .Case<LWESchemeType>([&](auto ty) { return std::string("LWESchemeT"); })
       .Case<lwe::RLWECiphertextType>(
           [&](auto ty) { return std::string("CiphertextT"); })
-      .Case<lwe::RLWEPlaintextType>(
+      .Case<lwe::NewLWEPlaintextType>(
           [&](auto ty) { return std::string("Plaintext"); })
       .Case<lwe::LWECiphertextType>(
-        [&](auto ty) { return std::string("LWECiphertext"); })
+          [&](auto ty) { return std::string("LWECiphertext"); })
       .Case<openfhe::EvalKeyType>(
           [&](auto ty) { return std::string("EvalKeyT"); })
       .Case<openfhe::PrivateKeyType>(
@@ -46,21 +60,38 @@ FailureOr<std::string> convertType(Type type) {
       .Case<IntegerType>([&](auto ty) {
         auto width = ty.getWidth();
         if (width != 1 && width < 8) width = 8;
-        if (width != 1 && width != 8 && width != 16 && width != 32 && width != 64) {
+        if (width != 1 && width != 8 && width != 16 && width != 32 &&
+            width != 64) {
           return FailureOr<std::string>();
         }
         SmallString<8> result;
         llvm::raw_svector_ostream os(result);
-        if (width == 1) os << "bool";
-        else os << "int" << width << "_t";
+        if (width == 1)
+          os << "bool";
+        else
+          os << "int" << width << "_t";
         return FailureOr<std::string>(std::string(result));
       })
+      .Case<FloatType>([&](auto ty) -> FailureOr<std::string> {
+        auto width = ty.getWidth();
+        switch (width) {
+          case 8:
+          case 16:
+            emitWarning(
+                loc,
+                "Floating point width " + std::to_string(width) +
+                    " is not supported in C++, using 32-bit float instead.");
+            [[fallthrough]];
+          case 32:
+            return std::string("float");
+          case 64:
+            return std::string("double");
+          default:
+            return failure();
+        }
+      })
       .Case<RankedTensorType>([&](auto ty) {
-        // if (ty.getRank() != 1) {
-        //   return FailureOr<std::string>();
-        // }
-
-        auto eltTyResult = convertType(ty.getElementType());
+        auto eltTyResult = convertType(ty.getElementType(), loc);
         if (failed(eltTyResult)) {
           llvm::dbgs() << "Element type conversion failed\n";
           return FailureOr<std::string>();
@@ -78,7 +109,8 @@ FailureOr<std::string> convertType(Type type) {
         return FailureOr<std::string>(std::string(result));
       })
       .Case<MemRefType>([&](MemRefType ty) {
-        return convertType(RankedTensorType::get(ty.getShape(), ty.getElementType()));
+        return convertType(
+            RankedTensorType::get(ty.getShape(), ty.getElementType()));
       })
       .Default([&](Type &) { return failure(); });
 }

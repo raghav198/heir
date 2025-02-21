@@ -1,17 +1,13 @@
 
-add_mlir_dialect_library(MLIROpenfheTarget
+add_mlir_library(HEIROpenFheRegistration
         OpenFhePkeEmitter.cpp
         OpenFhePkeHeaderEmitter.cpp
         OpenFheUtils.cpp
-
-        ADDITIONAL_HEADER_DIRS
-        ${CMAKE_CURRENT_SOURCE_DIR}/IR
-
-        DEPENDS
-        MLIROpenfheOpsIncGen
+        OpenFheTranslateRegistration.cpp
 
         LINK_LIBS PUBLIC
-        MLIROpenfhe
+        HEIROpenfhe
         MLIRIR
         MLIRInferTypeOpInterface
 )
+target_link_libraries(HEIRTarget INTERFACE HEIROpenFheRegistration)

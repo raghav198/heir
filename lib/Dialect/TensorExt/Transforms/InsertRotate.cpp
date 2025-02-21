@@ -7,6 +7,7 @@
 #include "mlir/include/mlir/Analysis/DataFlow/ConstantPropagationAnalysis.h"  // from @llvm-project
 #include "mlir/include/mlir/Analysis/DataFlow/DeadCodeAnalysis.h"  // from @llvm-project
 #include "mlir/include/mlir/Analysis/DataFlowFramework.h"  // from @llvm-project
+#include "mlir/include/mlir/IR/Builders.h"                 // from @llvm-project
 #include "mlir/include/mlir/IR/MLIRContext.h"              // from @llvm-project
 #include "mlir/include/mlir/IR/Matchers.h"                 // from @llvm-project
 #include "mlir/include/mlir/IR/Operation.h"                // from @llvm-project
@@ -91,7 +92,9 @@ struct InsertRotate : impl::InsertRotateBase<InsertRotate> {
 
     alignment::populateWithGenerated(patterns);
     canonicalization::populateWithGenerated(patterns);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    // TODO (#1221): Investigate whether folding (default: on) can be skipped
+    // here.
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
   }
 };
 

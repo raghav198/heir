@@ -8,14 +8,34 @@ def CGGICanonicalizeToLuts : Pass<"cggi-canonicalize-luts"> {
   let summary = "";
   let description = [{
   }];
+  let dependentDialects = [
+    "mlir::heir::cggi::CGGIDialect",
+    "mlir::heir::mod_arith::ModArithDialect",
+  ];
+}
+
+def ExpandLUT : Pass<"cggi-expand-lut"> {
+  let summary = "Expands LUTs into LWE operations and programmable bootstraps";
+  let description = [{
+    This pass expands the linear combination performed in a LUT operation into
+    the component LWE scalar operations and a programmable bootstrap operation.
+
+    For example, a LUT3 operation is composed of three LWE ciphertext inputs $c,
+    b, a$ (in MSB to LSB ordering) which must be combined via the linear
+    combination $4 * c + 2 * b + a$ before being fed into a programmable
+    bootstrap defined by the lookup table.
+
+    This pass supports LUT2, LUT3, and LutLincomb operations.
+  }];
   let dependentDialects = ["mlir::heir::cggi::CGGIDialect"];
 }
 
-def BooleanLineVectorizer : Pass<"cggi-boolean-line-vectorize"> {
+def BooleanVectorizer : Pass<"cggi-boolean-vectorize"> {
   let summary = "Group different logic gates with the packed API";
   let description = [{
     This pass groups independent logic gates into a single call of the packed
-    operations.
+    operations. Pass is based on the straight-line-vectorizer, but is fundamentally different.
+    This pass combines any type of boolean gates and is not restricted to combining the same type of gate operand.
 
     Pass is intended for the `FPT` tfhe-rs API, where `packed_gates` function get a
     the boolean gates are passed as a string vector and a left and right vector of ciphertexts.
@@ -26,11 +46,14 @@ def BooleanLineVectorizer : Pass<"cggi-boolean-line-vectorize"> {
     ```
   }];
 
+  let options = [
+    Option<"parallelism", "parallelism", "int",
+           /*default=*/"0", "Parallelism factor for batching. 0 is infinite parallelism">
+  ];
+
   let dependentDialects = [
     "tensor::TensorDialect",
   ];
-
-  // let dependentDialects = ["mlir::heir::cggi::CGGIDialect"];
 }
 
 #endif  // LIB_DIALECT_CGGI_TRANSFORMS_PASSES_TD_

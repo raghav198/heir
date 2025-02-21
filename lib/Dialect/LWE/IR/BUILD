@@ -1,4 +1,5 @@
-load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library", "td_library")
+load("@heir//lib/Dialect:dialect.bzl", "add_heir_dialect_library")
+load("@llvm-project//mlir:tblgen.bzl", "td_library")
 
 package(
     default_applicable_licenses = ["@heir//:license"],
@@ -20,12 +21,16 @@ cc_library(
     deps = [
         ":attributes_inc_gen",
         ":dialect_inc_gen",
+        ":enums_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
+        "@heir//lib/Dialect/ModArith/IR:Dialect",
+        "@heir//lib/Dialect/Polynomial/IR:Dialect",
+        "@heir//lib/Dialect/RNS/IR:Dialect",
+        "@heir//lib/Utils/Tablegen:AsmInterfaces",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:InferTypeOpInterface",
-        "@llvm-project//mlir:PolynomialDialect",
         "@llvm-project//mlir:Support",
     ],
 )
@@ -52,10 +57,13 @@ td_library(
         "LWEOps.td",
         "LWETraits.td",
         "LWETypes.td",
+        "NewLWEAttributes.td",
+        "NewLWETypes.td",
     ],
     # include from the heir-root to enable fully-qualified include-paths
     includes = ["../../../.."],
     deps = [
+        "@heir//lib/Utils/Tablegen:td_files",
         "@llvm-project//mlir:BuiltinDialectTdFiles",
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
         "@llvm-project//mlir:OpBaseTdFiles",
@@ -63,114 +71,53 @@ td_library(
     ],
 )
 
-gentbl_cc_library(
+add_heir_dialect_library(
     name = "dialect_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-dialect-decls",
-            ],
-            "LWEDialect.h.inc",
-        ),
-        (
-            [
-                "-gen-dialect-defs",
-            ],
-            "LWEDialect.cpp.inc",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    dialect = "LWE",
+    kind = "dialect",
     td_file = "LWEDialect.td",
     deps = [
         ":td_files",
     ],
 )
 
-gentbl_cc_library(
+add_heir_dialect_library(
     name = "attributes_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-attrdef-decls",
-            ],
-            "LWEAttributes.h.inc",
-        ),
-        (
-            [
-                "-gen-attrdef-defs",
-            ],
-            "LWEAttributes.cpp.inc",
-        ),
-        (
-            ["-gen-attrdef-doc"],
-            "LWEAttributes.md",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    dialect = "LWE",
+    kind = "attribute",
     td_file = "LWEAttributes.td",
     deps = [
-        ":dialect_inc_gen",
         ":td_files",
     ],
 )
 
-gentbl_cc_library(
-    name = "types_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-typedef-decls",
-                "-typedefs-dialect=lwe",
-            ],
-            "LWETypes.h.inc",
-        ),
-        (
-            [
-                "-gen-typedef-defs",
-                "-typedefs-dialect=lwe",
-            ],
-            "LWETypes.cpp.inc",
-        ),
-        (
-            [
-                "-gen-typedef-doc",
-                "-typedefs-dialect=lwe",
-            ],
-            "LWETypes.md",
-        ),
+add_heir_dialect_library(
+    name = "enums_inc_gen",
+    dialect = "LWE",
+    kind = "enum",
+    td_file = "LWEAttributes.td",
+    deps = [
+        ":td_files",
     ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
+)
+
+add_heir_dialect_library(
+    name = "types_inc_gen",
+    dialect = "LWE",
+    kind = "type",
     td_file = "LWETypes.td",
     deps = [
-        ":attributes_inc_gen",
-        ":dialect_inc_gen",
         ":td_files",
-        "@llvm-project//mlir:PolynomialTdFiles",
     ],
 )
 
-gentbl_cc_library(
+add_heir_dialect_library(
     name = "ops_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-op-decls"],
-            "LWEOps.h.inc",
-        ),
-        (
-            ["-gen-op-defs"],
-            "LWEOps.cpp.inc",
-        ),
-        (
-            ["-gen-op-doc"],
-            "LWEOps.md",
-        ),
-    ],
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    dialect = "LWE",
+    kind = "op",
     td_file = "LWEOps.td",
     deps = [
-        ":dialect_inc_gen",
         ":td_files",
-        ":types_inc_gen",
-        "@llvm-project//mlir:PolynomialTdFiles",
+        "@heir//lib/Dialect/Polynomial/IR:td_files",
     ],
 )

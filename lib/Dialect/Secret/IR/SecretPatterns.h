@@ -1,11 +1,18 @@
 #ifndef LIB_DIALECT_SECRET_IR_SECRETPATTERNS_H_
 #define LIB_DIALECT_SECRET_IR_SECRETPATTERNS_H_
 
+#include <optional>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "lib/Dialect/Secret/IR/SecretOps.h"
 #include "lib/Dialect/Secret/IR/SecretTypes.h"
-#include "mlir/include/mlir/IR/PatternMatch.h"  // from @llvm-project
+#include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
+#include "mlir/include/mlir/IR/MLIRContext.h"           // from @llvm-project
+#include "mlir/include/mlir/IR/Operation.h"             // from @llvm-project
+#include "mlir/include/mlir/IR/PatternMatch.h"          // from @llvm-project
+#include "mlir/include/mlir/Support/LLVM.h"             // from @llvm-project
 
 namespace mlir {
 namespace heir {
@@ -234,6 +241,30 @@ void genericAbsorbDealloc(secret::GenericOp genericOp,
 // body with a call to the created function.
 LogicalResult extractGenericBody(secret::GenericOp genericOp,
                                  mlir::IRRewriter &rewriter);
+
+// This pattern adjusts function types that have become invalid due to one of
+// the patterns above. For example, CollapseSecretlessGeneric can lead to a
+// `func.return %i : !secret.secret<t>` being simplified back to
+// `func.return %i : t` while the function type still indicates the secret type.
+//
+//  // Simple example: a function that does not actually use its secret input
+//  func.func @func(%arg0: i16 {secret.secret}) -> i16 {
+//   %c1_i16 = arith.constant 1 : i16
+//   return %c1_i16 : i16
+// }
+//
+// TODO (#888): Rather than relying on `FixSecretInFunctionType` pattern,
+// instead use Secretness Analysis (after it fully supports all IR constructs)
+// in the `--wrap-generic` pass to decide whether or not to wrap the function
+// return type in `!secret.secret<..>`
+struct FixSecretInFunctionType : public OpRewritePattern<func::FuncOp> {
+  FixSecretInFunctionType(mlir::MLIRContext *context)
+      : OpRewritePattern<func::FuncOp>(context, /*benefit=*/1) {}
+
+ public:
+  LogicalResult matchAndRewrite(func::FuncOp op,
+                                PatternRewriter &rewriter) const override;
+};
 
 }  // namespace secret
 }  // namespace heir

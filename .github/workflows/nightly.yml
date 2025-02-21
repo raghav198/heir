@@ -1,16 +1,19 @@
 name: Nightly release
-permissions:
-  contents: write
-  # Packages write permission required to update a release
-  packages: write
+
+permissions: read-all
+
 on:
   workflow_dispatch:
   schedule:
     - cron: '0 0 * * *'
 jobs:
   build-and-test:
+    permissions:
+      contents: write
+      # Packages write permission required to update a release
+      packages: write
     runs-on:
-      labels: ubuntu-20.04-8core
+      labels: ubuntu-22.04-8core
     steps:
       - name: Check out repository code
         uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # pin@v3
@@ -25,6 +28,7 @@ jobs:
             bazel-bin/tools/heir-opt --help
             bazel-bin/tools/heir-translate --help
             bazel-bin/tools/heir-lsp --help
+            [ -f bazel-bin/external/edu_berkeley_abc/abc ]
 
       - name: Delete previous existing nightly tag and release
         env:
@@ -42,3 +46,5 @@ jobs:
             bazel-bin/tools/heir-opt
             bazel-bin/tools/heir-translate
             bazel-bin/tools/heir-lsp
+            bazel-bin/external/edu_berkeley_abc/abc
+            lib/Transforms/YosysOptimizer/yosys/techmap.v

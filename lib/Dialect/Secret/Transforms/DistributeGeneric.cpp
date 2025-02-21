@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "lib/Analysis/SecretnessAnalysis/SecretnessAnalysis.h"
+#include "lib/Dialect/Mgmt/IR/MgmtDialect.h"
 #include "lib/Dialect/Secret/IR/SecretOps.h"
 #include "lib/Dialect/Secret/IR/SecretPatterns.h"
 #include "lib/Dialect/Secret/IR/SecretTypes.h"
@@ -170,7 +171,7 @@ struct SplitGeneric : public OpRewritePattern<GenericOp> {
       // Ensure that the loop bound operands are also validated. If they are
       // secret types, then return a failure - we cannot distribute through a
       // loop with secret bounds.
-      auto isSecret = [&](OpFoldResult v) {
+      auto hasSecretType = [&](OpFoldResult v) {
         if (auto value = dyn_cast<Value>(v)) {
           if (auto *genericOperand =
                   genericOp.getOpOperandForBlockArgument(value)) {
@@ -182,9 +183,9 @@ struct SplitGeneric : public OpRewritePattern<GenericOp> {
         return false;
       };
       if ((loop.getLoopLowerBounds().has_value() &&
-           llvm::any_of(loop.getLoopLowerBounds().value(), isSecret)) ||
+           llvm::any_of(loop.getLoopLowerBounds().value(), hasSecretType)) ||
           (loop.getLoopUpperBounds().has_value() &&
-           llvm::any_of(loop.getLoopUpperBounds().value(), isSecret))) {
+           llvm::any_of(loop.getLoopUpperBounds().value(), hasSecretType))) {
         LLVM_DEBUG(genericOp.emitRemark()
                    << "cannot distribute through a LoopLikeInterface with "
                       "secret bounds");
@@ -199,15 +200,12 @@ struct SplitGeneric : public OpRewritePattern<GenericOp> {
       DenseMap<Value, Value> newInitsToOperands;
       for (auto [operand, blockArg] : llvm::zip(
                clonedLoop.getInitsMutable(), clonedLoop.getRegionIterArgs())) {
-        auto yieldedIterValue = clonedLoop.getTiedLoopYieldedValue(blockArg);
+        auto *yieldedIterValue = clonedLoop.getTiedLoopYieldedValue(blockArg);
         if (isa<SecretType>(operand.get().getType())) {
           blockArg.setType(operand.get().getType());
-        } else if (solver
-                       ->lookupState<SecretnessLattice>(
-                           loop.getYieldedValues()[yieldedIterValue
-                                                       ->getOperandNumber()])
-                       ->getValue()
-                       .getSecretness() &&
+        } else if (isSecret(loop.getYieldedValues()[yieldedIterValue
+                                                        ->getOperandNumber()],
+                            solver) &&
                    !isa<SecretType>(operand.get().getType())) {
           // The initial value of an iter_arg yielded by the original loop must
           // be promoted to a secret and added to the new generic's operands if
@@ -571,14 +569,24 @@ struct SplitGeneric : public OpRewritePattern<GenericOp> {
       LLVM_DEBUG(opToDistribute->emitRemark()
                  << "Distributing through region holding op isolated in its "
                     "own generic\n");
-      return distributeThroughRegionHoldingOp(op, *opToDistribute, rewriter);
-    }
-
-    if (first) {
-      splitGenericAfterFirstOp(op, rewriter);
+      LogicalResult result =
+          distributeThroughRegionHoldingOp(op, *opToDistribute, rewriter);
+      if (failed(result)) {
+        return failure();
+      }
+    } else if (first) {
+      auto newGeneric = splitGenericAfterFirstOp(op, rewriter);
+      // We must re-run the secretness analysis on the new generic to populate
+      // the secretness of the operations inside the new generic. Since the
+      // generic is new, pre-existing values in the secretness analysis are
+      // unaffected and do not affect the new generic's body.
+      if (failed(solver->initializeAndRun(newGeneric.getOperation()))) {
+        return failure();
+      }
     } else {
       splitGenericBeforeOp(op, *opToDistribute, rewriter);
     }
+
     return success();
   }
 
@@ -586,6 +594,57 @@ struct SplitGeneric : public OpRewritePattern<GenericOp> {
   llvm::ArrayRef<std::string> opsToDistribute;
   DataFlowSolver *solver;
 };
+
+// should be called right before all splitting
+void moveMgmtAttrAnnotationToFuncArgument(Operation *top) {
+  top->walk([&](secret::GenericOp genericOp) {
+    for (auto i = 0; i != genericOp->getNumOperands(); ++i) {
+      auto operand = genericOp.getOperand(i);
+      auto funcBlockArg = dyn_cast<BlockArgument>(operand);
+      if (isa<SecretType>(operand.getType()) && funcBlockArg) {
+        auto funcOp =
+            dyn_cast<func::FuncOp>(funcBlockArg.getOwner()->getParentOp());
+        auto mgmtAttr =
+            genericOp.removeArgAttr(i, mgmt::MgmtDialect::kArgMgmtAttrName);
+        if (mgmtAttr) {
+          funcOp.setArgAttr(funcBlockArg.getArgNumber(),
+                            mgmt::MgmtDialect::kArgMgmtAttrName, mgmtAttr);
+        }
+      }
+    }
+  });
+  // some unused func secret type arg should also be annotated with mgmt attr,
+  // inferred from other used arg
+  top->walk([&](func::FuncOp funcOp) {
+    Attribute firstMgmtAttr;
+    for (auto i = 0; i != funcOp.getNumArguments(); ++i) {
+      firstMgmtAttr = funcOp.getArgAttr(i, mgmt::MgmtDialect::kArgMgmtAttrName);
+      if (firstMgmtAttr) {
+        break;
+      }
+    }
+    for (auto i = 0; i != funcOp.getNumArguments(); ++i) {
+      auto arg = funcOp.getArgument(i);
+      if (firstMgmtAttr && mlir::isa<SecretType>(arg.getType()) &&
+          !funcOp.getArgAttr(i, mgmt::MgmtDialect::kArgMgmtAttrName)) {
+        funcOp.setArgAttr(i, mgmt::MgmtDialect::kArgMgmtAttrName,
+                          firstMgmtAttr);
+      }
+    }
+  });
+}
+
+// should be called when done with all splitting
+// assume only one inner op
+void moveMgmtAttrAnnotationFromInnerToOuter(Operation *top) {
+  top->walk([&](secret::GenericOp genericOp) {
+    auto *innerOp = &genericOp.getBody()->front();
+    auto mgmtAttr = innerOp->removeAttr(mgmt::MgmtDialect::kArgMgmtAttrName);
+    if (mgmtAttr) {
+      genericOp->setAttr(mgmt::MgmtDialect::kArgMgmtAttrName, mgmtAttr);
+    }
+  });
+}
 
 struct DistributeGeneric
     : impl::SecretDistributeGenericBase<DistributeGeneric> {
@@ -620,11 +679,19 @@ struct DistributeGeneric
       return;
     }
 
+    // used by secret-to-<scheme> lowering
+    moveMgmtAttrAnnotationToFuncArgument(getOperation());
+
     patterns.add<SplitGeneric>(context, opsToDistribute, &solver);
     // These patterns are shared with canonicalization
     patterns.add<FoldSecretSeparators, CollapseSecretlessGeneric,
                  RemoveUnusedGenericArgs, RemoveNonSecretGenericArgs>(context);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    // TODO (#1221): Investigate whether folding (default: on) can be skipped
+    // here.
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
+
+    // used by secret-to-<scheme> lowering
+    moveMgmtAttrAnnotationFromInnerToOuter(getOperation());
   }
 };
 

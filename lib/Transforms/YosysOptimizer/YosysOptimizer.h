@@ -3,8 +3,12 @@
 
 #include <stdbool.h>
 
+#include <memory>
+#include <string>
+
 #include "llvm/include/llvm/Support/CommandLine.h"  // from @llvm-project
 #include "mlir/include/mlir/Pass/Pass.h"            // from @llvm-project
+#include "mlir/include/mlir/Pass/PassOptions.h"     // from @llvm-project
 
 namespace mlir {
 namespace heir {
@@ -13,7 +17,8 @@ enum Mode { Boolean, LUT };
 
 std::unique_ptr<mlir::Pass> createYosysOptimizer(
     const std::string &yosysFilesPath, const std::string &abcPath, bool abcFast,
-    int unrollFactor = 0, Mode mode = LUT, bool printStats = false);
+    int unrollFactor = 0, bool useSubmodules = true, Mode mode = LUT,
+    bool printStats = false);
 
 #define GEN_PASS_DECL
 #include "lib/Transforms/YosysOptimizer/YosysOptimizer.h.inc"
@@ -29,6 +34,12 @@ struct YosysOptimizerPipelineOptions
       llvm::cl::desc("Unroll loops by a given factor before optimizing. A "
                      "value of zero (default) prevents unrolling."),
       llvm::cl::init(0)};
+
+  PassOptions::Option<bool> useSubmodules{
+      *this, "use-submodules",
+      llvm::cl::desc("Extracts secret.generic bodies into submodules before "
+                     "optimizing. Default is true."),
+      llvm::cl::init(true)};
 
   PassOptions::Option<enum Mode> mode{
       *this, "mode",

@@ -10,9 +10,10 @@ cc_library(
     srcs = ["VerilogEmitter.cpp"],
     hdrs = ["VerilogEmitter.h"],
     deps = [
-        "@heir//lib/Conversion/MemrefToArith:Utils",
         "@heir//lib/Dialect/Secret/IR:Dialect",
-        "@heir//lib/Target:Utils",
+        "@heir//lib/Transforms/MemrefToArith:Utils",
+        "@heir//lib/Utils",
+        "@heir//lib/Utils:TargetUtils",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AffineAnalysis",
         "@llvm-project//mlir:AffineDialect",
