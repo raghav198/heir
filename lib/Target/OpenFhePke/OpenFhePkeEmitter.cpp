@@ -15,11 +15,12 @@
 #include "lib/Dialect/Openfhe/IR/OpenfheOps.h"
 #include "lib/Target/OpenFhePke/OpenFheUtils.h"
 #include "lib/Utils/TargetUtils.h"
-#include "llvm/include/llvm/ADT/STLExtras.h"             // from @llvm-project
-#include "llvm/include/llvm/ADT/SmallVector.h"           // from @llvm-project
-#include "llvm/include/llvm/ADT/StringExtras.h"          // from @llvm-project
-#include "llvm/include/llvm/ADT/TypeSwitch.h"            // from @llvm-project
-#include "llvm/include/llvm/Support/Casting.h"           // from @llvm-project
+#include "llvm/include/llvm/ADT/STLExtras.h"     // from @llvm-project
+#include "llvm/include/llvm/ADT/SmallVector.h"   // from @llvm-project
+#include "llvm/include/llvm/ADT/StringExtras.h"  // from @llvm-project
+#include "llvm/include/llvm/ADT/TypeSwitch.h"    // from @llvm-project
+#include "llvm/include/llvm/Support/Casting.h"   // from @llvm-project
+#include "llvm/include/llvm/Support/Debug.h"
 #include "llvm/include/llvm/Support/FormatVariadic.h"    // from @llvm-project
 #include "llvm/include/llvm/Support/raw_ostream.h"       // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"    // from @llvm-project
@@ -137,15 +138,15 @@ LogicalResult OpenFhePkeEmitter::printOperation(ModuleOp moduleOp) {
   return success();
 }
 
-LogicalResult OpenFhePkeEmitter::printOperation(func::CallOp op) {
-  emitAutoAssignPrefix(op.getResult(0));
-  os << op.getCallee() << "(";
-  os << commaSeparatedValues(op.getArgOperands(), [this](auto arg) {
-    return variableNames->getNameForValue(arg);
-  });
-  os << ");\n";
-  return success();
-}
+// LogicalResult OpenFhePkeEmitter::printOperation(func::CallOp op) {
+//   emitAutoAssignPrefix(op.getResult(0));
+//   os << op.getCallee() << "(";
+//   os << commaSeparatedValues(op.getArgOperands(), [this](auto arg) {
+//     return variableNames->getNameForValue(arg);
+//   });
+//   os << ");\n";
+//   return success();
+// }
 StringRef OpenFhePkeEmitter::canonicalizeDebugPort(StringRef debugPortName) {
   if (debugPortName.rfind("__heir_debug") == 0) {
     return "__heir_debug";
@@ -519,8 +520,9 @@ LogicalResult OpenFhePkeEmitter::printOperation(arith::IndexCastOp op) {
 LogicalResult OpenFhePkeEmitter::printBinaryOp(::mlir::Value result,
                                                ::mlir::Value lhs,
                                                ::mlir::Value rhs,
-                                               const std::string &op) {
-  if (failed(emitTypedAssignPrefix(result))) {
+                                               const std::string &op,
+                                               Location loc) {
+  if (failed(emitTypedAssignPrefix(result, loc))) {
     llvm::dbgs() << "Type emit failed\n";
     return failure();
   }
@@ -530,17 +532,21 @@ LogicalResult OpenFhePkeEmitter::printBinaryOp(::mlir::Value result,
 }
 
 LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::SubIOp op) {
-  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "-");
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "-",
+                       op->getLoc());
 }
 LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::AddIOp op) {
-  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "+");
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "+",
+                       op->getLoc());
 }
 LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::MulIOp op) {
-  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "*");
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "*",
+                       op->getLoc());
 }
 LogicalResult OpenFhePkeEmitter::printOperation(
     ::mlir::arith::FloorDivSIOp op) {
-  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "/");
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "/",
+                       op->getLoc());
 }
 LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::CmpIOp op) {
   std::string cmp;
@@ -576,19 +582,23 @@ LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::CmpIOp op) {
       cmp = ">=";
       break;
   }
-  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), cmp);
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), cmp,
+                       op->getLoc());
 }
 
 LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::AndIOp op) {
-  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "&");
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), "&",
+                       op->getLoc());
 }
 
 LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::ShRSIOp op) {
-  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), ">>");
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), ">>",
+                       op->getLoc());
 }
 
 LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::ShRUIOp op) {
-  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), ">>");
+  return printBinaryOp(op.getResult(), op.getLhs(), op.getRhs(), ">>",
+                       op->getLoc());
 }
 
 LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::TruncIOp op) {
@@ -605,6 +615,7 @@ LogicalResult OpenFhePkeEmitter::printOperation(::mlir::arith::SelectOp op) {
   os << variableNames->getNameForValue(op.getCondition()) << " ? "
      << variableNames->getNameForValue(op.getTrueValue()) << " : "
      << variableNames->getNameForValue(op.getFalseValue()) << ";\n";
+  return success();
 }
 LogicalResult OpenFhePkeEmitter::printOperation(tensor::EmptyOp op) {
   // std::vector<std::vector<CiphertextT>> result(dim0,

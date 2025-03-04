@@ -251,7 +251,7 @@ def SubPlainOp : Openfhe_Op<"sub_plain",[
 def LWEAddOp : Openfhe_lwe_BinaryOp<"lwe_add"> { let summary = "OpenFHE add operation of two LWE ciphertexts."; }
 def LWESubOp : Openfhe_lwe_BinaryOp<"lwe_sub"> { let summary = "OpenFHE sub operation of two LWE ciphertexts."; }
 
-def MulNoRelinOp : Openfhe_Op<"mul_no_relin", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
+// def MulNoRelinOp : Openfhe_Op<"mul_no_relin", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
 def MulOp : Openfhe_BinaryOp<"mul", [AllTypesMatch<["lhs", "rhs", "output"]>]> { let summary = "OpenFHE mul operation of two ciphertexts with relinearization."; }
 
 def MulNoRelinOp : Openfhe_Op<"mul_no_relin", [Pure, SameOperandsAndResultRings]> {

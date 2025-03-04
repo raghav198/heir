@@ -22,18 +22,17 @@ struct ShrinkLutConstants
 
     root->walk([&lutConstantIndices](comb::TruthTableOp lut) -> void {
       std::set<int> constantIndices;
-      for (auto [i, input] : llvm::enumerate(lut.getLookupTableInputs())) {
+      for (auto [i, input] : llvm::enumerate(*lut.getLookupTableInputs())) {
         if (mlir::isa_and_nonnull<arith::ConstantOp>(input.getDefiningOp()))
           constantIndices.insert(i);
       }
       if (!constantIndices.empty()) {
         lutConstantIndices.insert({lut, constantIndices});
       }
-        
     });
 
     for (auto &[lut, indices] : lutConstantIndices) {
-      auto originalLutInputs = lut.getLookupTableInputs();
+      auto originalLutInputs = *lut.getLookupTableInputs();
       int reducedSize = originalLutInputs.size() - indices.size();
       std::vector<int> convertedInputBitsFixed(originalLutInputs.size());
       for (auto index : indices) {

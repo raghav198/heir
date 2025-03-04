@@ -11,7 +11,8 @@ cc_library(
     hdrs = ["CGGIToOpenfhe.h"],
     deps = [
         ":pass_inc_gen",
-        "@heir//lib/Conversion:Utils",
+        "@heir//lib/Utils:ConversionUtils",
+        # "@heir//lib/Conversion:Utils",
         "@heir//lib/Dialect/CGGI/IR:Dialect",
         "@heir//lib/Dialect/Openfhe/IR:Dialect",
         "@heir//lib/Dialect/Comb/IR:Dialect",

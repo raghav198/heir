@@ -47,14 +47,17 @@ def Openfhe_CryptoContext : Openfhe_Type<"CryptoContext", "crypto_context"> {
 
 def Openfhe_BinFHEContext : Openfhe_Type<"BinFHEContext", "binfhe_context"> {
   let summary = "The BinFHEContext required to perform homomorphic operations in OpenFHE.";
+  let nameSuggestion = "ctx";
 }
 
 def Openfhe_LWEScheme : Openfhe_Type<"LWEScheme", "lwe_scheme"> {
   let summary = "A reference to the underlying LWE scheme for lower level operations in OpenFHE.";
+  let nameSuggestion = "scheme";
 }
 
 def Openfhe_LUT : Openfhe_Type<"LookupTable", "lookup_table"> {
   let summary = "A lookup table mapping Z/p -> Z/p";
+  let nameSuggestion = "lut";
 }
 
 #endif  // LIB_DIALECT_OPENFHE_IR_OPENFHETYPES_TD_

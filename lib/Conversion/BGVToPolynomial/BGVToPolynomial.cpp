@@ -3,10 +3,11 @@
 #include <cstddef>
 #include <optional>
 
-#include "lib/Conversion/Utils.h"
+// #include "lib/Conversion/Utils.h"
 #include "lib/Dialect/BGV/IR/BGVDialect.h"
 #include "lib/Dialect/BGV/IR/BGVOps.h"
 #include "lib/Dialect/LWE/IR/LWETypes.h"
+#include "lib/Utils/ConversionUtils.h"
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Polynomial/IR/Polynomial.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Polynomial/IR/PolynomialAttributes.h"  // from @llvm-project

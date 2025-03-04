@@ -15,7 +15,7 @@ cc_library(
         ":pass_inc_gen",
         ":SynthesizeArithmeticLut",
         "@heir//lib/Dialect/Comb/IR:Dialect",
-        "@heir//lib/Graph",
+        "@heir//lib/Utils/Graph",
         "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:MemRefDialect",

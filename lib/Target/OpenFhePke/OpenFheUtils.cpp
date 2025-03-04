@@ -110,7 +110,7 @@ FailureOr<std::string> convertType(Type type, Location loc) {
       })
       .Case<MemRefType>([&](MemRefType ty) {
         return convertType(
-            RankedTensorType::get(ty.getShape(), ty.getElementType()));
+            RankedTensorType::get(ty.getShape(), ty.getElementType()), loc);
       })
       .Default([&](Type &) { return failure(); });
 }

@@ -36,7 +36,7 @@ graph::Graph<mlir::Operation*> makeLUTGraph(mlir::Operation* root) {
 
 template <class T>
 static llvm::raw_ostream& operator<<(llvm::raw_ostream& os,
-                              const std::vector<T>& vec) {
+                                     const std::vector<T>& vec) {
   os << "[";
   for (auto t : vec) os << t;
   os << "]";
@@ -85,9 +85,9 @@ static mlir::APInt bitvecToAPInt(const B& bitvec) {
 }
 
 static mlir::APInt composeLookupTables(const llvm::SmallVector<int>& sourceIdxs,
-                                const mlir::APInt& sourceLut,
-                                const llvm::SmallVector<int>& destIdxs,
-                                const mlir::APInt& destLut) {
+                                       const mlir::APInt& sourceLut,
+                                       const llvm::SmallVector<int>& destIdxs,
+                                       const mlir::APInt& destLut) {
   int composedInputCount =
       std::max(*std::max_element(sourceIdxs.begin(), sourceIdxs.end()),
                *std::max_element(destIdxs.begin(), destIdxs.end())) +
@@ -158,10 +158,10 @@ mlir::APInt getMergedLookupTable(comb::TruthTableOp user,
   mlir::SmallVector<int> sourceIdxs;
   mlir::SmallVector<int> destIdxs;
 
-  for (auto sourceInput : lutToMerge.getLookupTableInputs())
+  for (auto sourceInput : *lutToMerge.getLookupTableInputs())
     sourceIdxs.push_back(inputIndices[sourceInput]);
 
-  for (auto destInput : user.getLookupTableInputs()) {
+  for (auto destInput : *user.getLookupTableInputs()) {
     if (inputIndices.contains(destInput))
       destIdxs.push_back(inputIndices[destInput]);
     else
@@ -177,13 +177,13 @@ mlir::APInt getMergedLookupTable(comb::TruthTableOp user,
 
 mlir::FailureOr<LutMergeResult> mergeLutsIfPossible(
     comb::TruthTableOp user, comb::TruthTableOp lutToMerge,
-    mlir::OpBuilder& builder, int solverTimeout,
-    uint64_t &solverMaxFailures, uint64_t &solverMaxBranches,
-    uint64_t &solverMaxTime, uint64_t &solverSolutions) {
+    mlir::OpBuilder& builder, int solverTimeout, uint64_t& solverMaxFailures,
+    uint64_t& solverMaxBranches, uint64_t& solverMaxTime,
+    uint64_t& solverSolutions) {
   mlir::SetVector<Value> userInputs;
-  for (auto input : user.getLookupTableInputs()) {
+  for (auto input : *user.getLookupTableInputs()) {
     if (input.getDefiningOp<comb::TruthTableOp>() == lutToMerge) {
-      for (auto sourceInput : lutToMerge.getLookupTableInputs())
+      for (auto sourceInput : *lutToMerge.getLookupTableInputs())
         userInputs.insert(sourceInput);
       continue;
     }
@@ -206,8 +206,7 @@ mlir::FailureOr<LutMergeResult> mergeLutsIfPossible(
 
   return LutMergeResult{.userInputs = userInputs.takeVector(),
                         .lookupTable = lookupTable,
-                        .arithmeticLookupTable = *synthesisResult
-                        };
+                        .arithmeticLookupTable = *synthesisResult};
 }
 
 }  // namespace heir

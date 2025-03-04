@@ -1,20 +1,23 @@
 common --action_env=BAZEL_CXXOPTS=-std=c++17
 common --cxxopt='-std=c++17'
+common --host_cxxopt='-std=c++17'
 common --copt=-fdiagnostics-color=always
 common --test_output=errors
 # compilation_mode options below are `dbg` (debug symbols) `fastbuild`
 # (build as quickly as possible), and `opt` (turn on all optimizations)
 common -c dbg
-common --noenable_bzlmod
+common --enable_bzlmod
+# required for hybrid bzlmod+workspace builds
+common --enable_workspace
 # prevents changes to PATH from causing a full rebuild
 common --incompatible_strict_action_env
 
 # default to clang and lld
-build --action_env=CC=clang
-build --action_env=CXX=clang++
-build --host_action_env=CC=clang
-build --host_action_env=CXX=clang++
-build --linkopt="-fuse-ld=lld"
+build --action_env=CC=/usr/bin/clang
+build --action_env=CXX=/usr/bin/clang++
+build --host_action_env=CC=/usr/bin/clang
+build --host_action_env=CXX=/usr/bin/clang++
+#build --linkopt="-fuse-ld=lld"
 
 # run with --config=gcc to force use of gcc
 # (and the default linker, usually ld) instead

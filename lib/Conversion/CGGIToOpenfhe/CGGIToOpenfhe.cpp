@@ -3,7 +3,7 @@
 #include <iostream>
 #include <numeric>
 
-#include "lib/Conversion/Utils.h"
+// #include "lib/Conversion/Utils.h"
 #include "lib/Dialect/CGGI/IR/CGGIDialect.h"
 #include "lib/Dialect/CGGI/IR/CGGIOps.h"
 #include "lib/Dialect/LWE/IR/LWEDialect.h"
@@ -12,11 +12,15 @@
 #include "lib/Dialect/Openfhe/IR/OpenfheDialect.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheOps.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheTypes.h"
+#include "lib/Utils/ConversionUtils.h"
+#include "llvm/include/llvm/Support/Debug.h"
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"    // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
 #include "mlir/include/mlir/IR/ImplicitLocOpBuilder.h"   // from @llvm-project
 #include "mlir/include/mlir/Transforms/DialectConversion.h"  // from @llvm-project
+
+#define DEBUG_TYPE "cggi-to-openfhe"
 
 namespace mlir::heir {
 
@@ -33,7 +37,7 @@ class CGGIToOpenfheTypeConverter : public TypeConverter {
 
 // Commented this out bc it throws a linker error since there's another one in
 // CGGI -> TFHE Rust bool
-bool containsCGGIOps2(func::FuncOp func) {
+static bool containsCGGIOps2(func::FuncOp func) {
   auto walkResult = func.walk([&](Operation *op) {
     if (llvm::isa<cggi::CGGIDialect>(op->getDialect()))
       return WalkResult::interrupt();
@@ -53,7 +57,11 @@ struct AddCryptoContextParam : public OpConversionPattern<func::FuncOp> {
   LogicalResult matchAndRewrite(
       func::FuncOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
+    LLVM_DEBUG(llvm::dbgs()
+               << "Attempting to add context param to: " << op << "\n");
+
     if (!containsCGGIOps2(op)) {
+      LLVM_DEBUG(llvm::dbgs() << "No crypto ops, skipping...\n");
       return failure();
     }
 
@@ -94,7 +102,7 @@ FailureOr<Value> getContextualCryptoContext(Operation *op) {
   }
   return cryptoContext;
 }
-} // namespace
+}  // namespace
 
 struct AddCryptoContextArg : public OpConversionPattern<func::CallOp> {
   AddCryptoContextArg(mlir::MLIRContext *context)
@@ -210,18 +218,18 @@ struct CGGIToOpenfhe : public impl::CGGIToOpenfheBase<CGGIToOpenfhe> {
       bool hasCryptoContext = func.getFunctionType().getNumInputs() > 0 &&
                               mlir::isa<openfhe::BinFHEContextType>(
                                   *func.getFunctionType().getInputs().begin());
-      return hasCryptoContext;
+      return hasCryptoContext || func.getName().starts_with("internal_generic");
     });
 
     target.addDynamicallyLegalOp<func::CallOp>([](func::CallOp call) {
-          bool hasCryptoContext = !call.getArgOperands().empty() &&
-                                  mlir::isa<openfhe::BinFHEContextType>(
-                                      *call.getArgOperands().getType().begin());
-          return hasCryptoContext;
-        });
+      bool hasCryptoContext = !call.getArgOperands().empty() &&
+                              mlir::isa<openfhe::BinFHEContextType>(
+                                  *call.getArgOperands().getType().begin());
+      return hasCryptoContext;
+    });
 
-        // target.addIllegalDialect<cggi::CGGIDialect>();
-        patterns
+    // target.addIllegalDialect<cggi::CGGIDialect>();
+    patterns
         .add<AddCryptoContextParam, AddCryptoContextArg, ConvertLutLincombOp>(
             typeConverter, context);
 

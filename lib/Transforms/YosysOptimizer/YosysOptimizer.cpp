@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <sstream>

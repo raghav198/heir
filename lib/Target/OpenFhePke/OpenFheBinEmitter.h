@@ -5,9 +5,10 @@
 #include "lib/Dialect/LWE/IR/LWEOps.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheOps.h"
 #include "lib/Target/OpenFhePke/OpenFhePkeEmitter.h"
-#include "llvm/include/llvm/Support/raw_ostream.h"       // from @llvm-project
-#include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"    // from @llvm-project
+#include "lib/Target/OpenFhePke/OpenFheUtils.h"
+#include "llvm/include/llvm/Support/raw_ostream.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"    // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"   // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/SCF/IR/SCF.h"        // from @llvm-project
@@ -28,7 +29,8 @@ LogicalResult translateToOpenFheBin(mlir::Operation *op, llvm::raw_ostream &os);
 class OpenFheBinEmitter : public OpenFhePkeEmitter {
  public:
   OpenFheBinEmitter(raw_ostream &os, SelectVariableNames *variableNames)
-      : OpenFhePkeEmitter(os, variableNames) {}
+      : OpenFhePkeEmitter(os, variableNames,
+                          OpenfheImportType::INSTALL_RELATIVE) {}
   LogicalResult translate(::mlir::Operation &operation) override;
 
  private:
@@ -57,7 +59,7 @@ class OpenFheBinEmitter : public OpenFhePkeEmitter {
   LogicalResult printInPlaceEvalMethod(mlir::Value result,
                                        mlir::Value cryptoContext,
                                        mlir::ValueRange operands,
-                                       std::string_view op);
+                                       std::string_view op, Location loc);
 
   SmallVector<std::string> getStaticDynamicArgs(
       SmallVector<mlir::Value> dynamicArgs, ArrayRef<int64_t> staticArgs);
@@ -67,7 +69,8 @@ class OpenFheBinEmitter : public OpenFhePkeEmitter {
                          std::is_same<T, memref::ReinterpretCastOp>>::value>>
   std::string getSubviewArgs(T op);
 
-  mlir::FailureOr<std::string> getAllocConstructor(MemRefType type);
+  mlir::FailureOr<std::string> getAllocConstructor(MemRefType type,
+                                                   Location loc);
 };
 
 }  // namespace mlir::heir::openfhe

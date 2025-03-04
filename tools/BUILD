@@ -7,7 +7,8 @@ package(
     default_visibility = ["//visibility:public"],
 )
 
-WORKSPACE_PATH = ""
+# changed from "heir" (or nothing) in bazel 8
+WORKSPACE_PATH = "" # "_main/"
 
 # Custom `mlir-opt` replacement that links our dialect and passes
 cc_binary(
@@ -34,23 +35,23 @@ cc_binary(
     }),
     includes = ["include"],
     deps = [
-        "@heir//lib/Conversion/BGVToLWE",
-        "@heir//lib/Conversion/BGVToOpenfhe",
-        "@heir//lib/Conversion/CGGIToJaxite",
-        "@heir//lib/Conversion/CGGIToTfheRust",
-        "@heir//lib/Conversion/CGGIToTfheRustBool",
-        "@heir//lib/Conversion/CKKSToOpenfhe",
-        "@heir//lib/Conversion/CombToCGGI",
-        "@heir//lib/Conversion/LWEToPolynomial",
-        "@heir//lib/Conversion/LinalgToTensorExt",
+        # "@heir//lib/Conversion/BGVToLWE",
+        # "@heir//lib/Conversion/BGVToOpenfhe",
+        # "@heir//lib/Conversion/CGGIToJaxite",
+        # "@heir//lib/Conversion/CGGIToTfheRust",
+        # "@heir//lib/Conversion/CGGIToTfheRustBool",
+        # "@heir//lib/Conversion/CKKSToOpenfhe",
+        # "@heir//lib/Conversion/CombToCGGI",
+        # "@heir//lib/Conversion/LWEToPolynomial",
+        # "@heir//lib/Conversion/LinalgToTensorExt",
         "@heir//lib/Conversion/CGGIToOpenfhe",
-        "@heir//lib/Conversion/MemrefToArith:ExpandCopy",
-        "@heir//lib/Conversion/MemrefToArith:MemrefToArithRegistration",
-        "@heir//lib/Conversion/ModArithToArith",
-        "@heir//lib/Conversion/PolynomialToStandard",
-        "@heir//lib/Conversion/SecretToBGV",
-        "@heir//lib/Conversion/SecretToCKKS",
-        "@heir//lib/Conversion/TosaToSecretArith",
+        # "@heir//lib/Conversion/MemrefToArith:ExpandCopy",
+        # "@heir//lib/Conversion/MemrefToArith:MemrefToArithRegistration",
+        # "@heir//lib/Conversion/ModArithToArith",
+        # "@heir//lib/Conversion/PolynomialToStandard",
+        # "@heir//lib/Conversion/SecretToBGV",
+        # "@heir//lib/Conversion/SecretToCKKS",
+        # "@heir//lib/Conversion/TosaToSecretArith",
         "@heir//lib/Dialect/Arith/Conversions/ArithToCGGI",
         "@heir//lib/Dialect/Arith/Conversions/ArithToCGGIQuart",
         "@heir//lib/Dialect/Arith/Conversions/ArithToModArith",

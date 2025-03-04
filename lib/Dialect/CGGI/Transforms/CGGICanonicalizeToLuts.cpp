@@ -3,9 +3,9 @@
 #include <iostream>
 
 #include "lib/Dialect/CGGI/IR/CGGIOps.h"
+#include "lib/Dialect/ModArith/IR/ModArithDialect.h"
 #include "llvm/include/llvm/Support/Debug.h"  // from @llvm-project
 #include "mlir/include/mlir/Transforms/GreedyPatternRewriteDriver.h"  // from @llvm-project
-
 namespace mlir {
 namespace heir {
 namespace cggi {
@@ -34,6 +34,19 @@ struct RewriteLutToLincomb : public OpRewritePattern<SourceLut> {
   }
 };
 
+struct RewriteCGGINot : public OpRewritePattern<cggi::NotOp> {
+  RewriteCGGINot(MLIRContext *context)
+      : OpRewritePattern<cggi::NotOp>(context) {}
+  LogicalResult matchAndRewrite(cggi::NotOp op,
+                                PatternRewriter &rewriter) const override {
+    mlir::SmallVector<mlir::Value> operands(op->getOperands());
+    rewriter.replaceOpWithNewOp<cggi::LutLinCombOp>(
+        op, operands, rewriter.getDenseI32ArrayAttr({1}),
+        rewriter.getIntegerAttr(rewriter.getIntegerType(2), 2));
+    return success();
+  }
+};
+
 template <class SourceOp, int binaryLut, int ternaryLut>
 struct RewriteCGGIOp : public OpRewritePattern<SourceOp> {
   RewriteCGGIOp(MLIRContext *context) : OpRewritePattern<SourceOp>(context) {}
@@ -43,17 +56,19 @@ struct RewriteCGGIOp : public OpRewritePattern<SourceOp> {
 
     if (operands.size() != 2 && operands.size() != 3) return failure();
     if (operands.size() == 2) {
-      rewriter.replaceOpWithNewOp<cggi::LutLinCombOp>(op, operands);
-      op->setAttr("coefficients", rewriter.getDenseI32ArrayAttr({1, 2}));
-      op->setAttr("lookup_table", rewriter.getIntegerAttr(
-                                      rewriter.getIntegerType(4), binaryLut));
+      auto newOp =
+          rewriter.replaceOpWithNewOp<cggi::LutLinCombOp>(op, operands);
+      newOp->setAttr("coefficients", rewriter.getDenseI32ArrayAttr({1, 2}));
+      newOp->setAttr(
+          "lookup_table",
+          rewriter.getIntegerAttr(rewriter.getIntegerType(4), binaryLut));
 
       return success();
     }
-    rewriter.replaceOpWithNewOp<cggi::LutLinCombOp>(op, operands);
-    op->setAttr("coefficients", rewriter.getDenseI32ArrayAttr({1, 2, 4}));
-    op->setAttr("lookup_table", rewriter.getIntegerAttr(
-                                    rewriter.getIntegerType(4), ternaryLut));
+    auto newOp = rewriter.replaceOpWithNewOp<cggi::LutLinCombOp>(op, operands);
+    newOp->setAttr("coefficients", rewriter.getDenseI32ArrayAttr({1, 2, 4}));
+    newOp->setAttr("lookup_table", rewriter.getIntegerAttr(
+                                       rewriter.getIntegerType(4), ternaryLut));
 
     return success();
   }
@@ -69,6 +84,8 @@ using RewriteCGGIXNor = RewriteCGGIOp<cggi::XNorOp, 9, 105>;
 // 10, 01, 00
 using RewriteCGGINAnd = RewriteCGGIOp<cggi::NandOp, 7, 127>;
 
+using RewriteCGGINor = RewriteCGGIOp<cggi::NorOp, 1, 1>;
+
 struct CGGICanonicalizeToLuts
     : impl::CGGICanonicalizeToLutsBase<CGGICanonicalizeToLuts> {
   using CGGICanonicalizeToLutsBase::CGGICanonicalizeToLutsBase;
@@ -78,9 +95,11 @@ struct CGGICanonicalizeToLuts
     RewritePatternSet patterns(context);
 
     patterns.add<RewriteCGGIAnd, RewriteCGGIOr, RewriteCGGIXor, RewriteCGGIXNor,
-                 RewriteCGGINAnd, RewriteLutToLincomb<cggi::Lut2Op>,
+                 RewriteCGGINAnd, RewriteCGGINor, RewriteCGGINot,
+                 RewriteLutToLincomb<cggi::Lut2Op>,
                  RewriteLutToLincomb<cggi::Lut3Op>>(context);
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
+    // (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
   }
 };
 

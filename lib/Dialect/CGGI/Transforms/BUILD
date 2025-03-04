@@ -21,6 +21,26 @@ cc_library(
 )
 
 cc_library(
+    name = "SetDefaultParameters",
+    srcs = ["SetDefaultParameters.cpp"],
+    hdrs = [
+        "SetDefaultParameters.h",
+    ],
+    deps = [
+        ":pass_inc_gen",
+        "@heir//lib/Dialect/CGGI/IR:Dialect",
+        "@heir//lib/Dialect/LWE/IR:Dialect",
+        "@heir//lib/Dialect/ModArith/IR:Dialect",
+        "@heir//lib/Dialect/Polynomial/IR:Dialect",
+        "@heir//lib/Utils/Polynomial",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
+cc_library(
     name = "CGGICanonicalizeToLuts",
     srcs = ["CGGICanonicalizeToLuts.cpp"],
     hdrs = ["CGGICanonicalizeToLuts.h"],
@@ -36,6 +56,8 @@ cc_library(
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TransformUtils",
+        "@llvm-project//mlir:Transforms"
     ],
 )
 

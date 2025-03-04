@@ -28,19 +28,20 @@ LogicalResult makeExplicit1DMapping(AffineMap map, unsigned rank,
     permInputs.push_back(b.getIndexAttr(permInput));
   }
 
-  llvm::copy(llvm::map_range(
-                 permInputs,
-                 [&](Attribute permInput) {
-                   SmallVector<Attribute> results;
-                   // AffineMap::constantFold is the mechanism to evaluate the
-                   // affine map on statically known inputs.
-                   if (failed(map.constantFold(permInput, results))) {
-                     assert(false && "constant folding should never fail here");
-                     return -1L;
-                   }
-                   return cast<IntegerAttr>(results[0]).getInt();
-                 }),
-             result.begin());
+  llvm::copy(
+      llvm::map_range(
+          permInputs,
+          [&](Attribute permInput) {
+            SmallVector<Attribute> results;
+            // AffineMap::constantFold is the mechanism to evaluate the
+            // affine map on statically known inputs.
+            if (failed(map.constantFold(permInput, results))) {
+              assert(false && "constant folding should never fail here");
+              return static_cast<int64_t>(-1);
+            }
+            return static_cast<int64_t>(cast<IntegerAttr>(results[0]).getInt());
+          }),
+      result.begin());
 
   return success();
 }

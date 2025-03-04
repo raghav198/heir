@@ -8,12 +8,12 @@
 #include "lib/Dialect/Openfhe/IR/OpenfheDialect.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheOps.h"
 #include "lib/Target/OpenFhePke/OpenFheUtils.h"
-#include "lib/Target/Utils.h"
+#include "lib/Utils/TargetUtils.h"
+#include "llvm/ADT/TypeSwitch.h"                       // from @llvm-project
+#include "llvm/include/llvm/Support/FormatVariadic.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/include/mlir/Support/LLVM.h"  // from @llvm-project
 #include "mlir/include/mlir/Tools/mlir-translate/Translation.h"  // from @llvm-project
-#include "llvm/ADT/TypeSwitch.h"                       // from @llvm-project
-#include "llvm/include/llvm/Support/FormatVariadic.h"  // from @llvm-project
 
 namespace mlir::heir::openfhe {
 
@@ -443,7 +443,7 @@ LogicalResult OpenFheBinEmitter::printOperation(mlir::ModuleOp module) {
 }
 
 LogicalResult OpenFheBinEmitter::printOperation(memref::LoadOp load) {
-  if (failed(emitTypedAssignPrefix(load.getResult()))) {
+  if (failed(emitTypedAssignPrefix(load.getResult(), load->getLoc()))) {
     return failure();
   }
   os << variableNames->getNameForValue(load.getMemRef()) << "["
@@ -459,19 +459,22 @@ LogicalResult OpenFheBinEmitter::printOperation(memref::StoreOp store) {
   return success();
 }
 
-mlir::FailureOr<std::string> OpenFheBinEmitter::getAllocConstructor(MemRefType type) {
+mlir::FailureOr<std::string> OpenFheBinEmitter::getAllocConstructor(
+    MemRefType type, Location loc) {
   std::string output;
   llvm::raw_string_ostream ss(output);
 
-  auto typeResult = convertType(type);
+  auto typeResult = convertType(type, loc);
   if (failed(typeResult)) {
     return failure();
   }
 
   ss << typeResult.value() << "(" << type.getShape()[0];
   if (type.getRank() > 1) {
-    auto sliced = MemRefType::get({type.getShape().begin() + 1, type.getShape().end()}, type.getElementType());
-    auto rest = getAllocConstructor(sliced);
+    auto sliced =
+        MemRefType::get({type.getShape().begin() + 1, type.getShape().end()},
+                        type.getElementType());
+    auto rest = getAllocConstructor(sliced, loc);
     if (failed(rest)) {
       return failure();
     }
@@ -483,13 +486,12 @@ mlir::FailureOr<std::string> OpenFheBinEmitter::getAllocConstructor(MemRefType t
 }
 
 LogicalResult OpenFheBinEmitter::printOperation(memref::AllocOp alloc) {
-
   auto memrefType = alloc.getResult().getType();
-  if (failed(emitTypedAssignPrefix(alloc.getResult()))) {
+  if (failed(emitTypedAssignPrefix(alloc.getResult(), alloc->getLoc()))) {
     return failure();
   }
 
-  auto allocResult = getAllocConstructor(memrefType);
+  auto allocResult = getAllocConstructor(memrefType, alloc->getLoc());
   if (failed(allocResult)) {
     return failure();
   }
@@ -499,12 +501,11 @@ LogicalResult OpenFheBinEmitter::printOperation(memref::AllocOp alloc) {
 
   // const auto *shapeBegin = memrefType.getShape().begin();
   // for (int dim = 0; dim < memrefType.getRank(); dim++) {
-  //   auto rankType = MemRefType::get({shapeBegin, memrefType.getShape().end()}, memrefType.getElementType());
-  //   auto typeResult = convertType(rankType);
-  //   if (failed(typeResult)) return failure();
-  //   os << typeResult.value() << "(" << *shapeBegin;
+  //   auto rankType = MemRefType::get({shapeBegin,
+  //   memrefType.getShape().end()}, memrefType.getElementType()); auto
+  //   typeResult = convertType(rankType); if (failed(typeResult)) return
+  //   failure(); os << typeResult.value() << "(" << *shapeBegin;
   // }
-
 
   // auto typeResult = convertType(*alloc->getResultTypes().begin());
   // if (failed(typeResult)) return failure();
@@ -529,7 +530,7 @@ LogicalResult OpenFheBinEmitter::printOperation(
 
   if (auto encoder =
           dyn_cast<lwe::EncodeOp>(trivialEncrypt.getInput().getDefiningOp())) {
-    auto ptxtName = variableNames->getNameForValue(encoder.getPlaintext());
+    auto ptxtName = variableNames->getNameForValue(encoder.getInput());
     emitAutoAssignPrefix(trivialEncrypt.getResult());
     os << "trivialEncrypt(" << variableNames->getNameForValue(cryptoContext)
        << ", " << ptxtName << ");\n";
@@ -553,12 +554,7 @@ SmallVector<std::string> OpenFheBinEmitter::getStaticDynamicArgs(
   return args;
 }
 
-template <
-    class T,
-    typename = typename std::enable_if_t<
-        std::disjunction<std::is_same<T, memref::SubViewOp>,
-                         std::is_same<T, memref::ReinterpretCastOp>>::value,
-        bool>>
+template <class T, typename>
 std::string OpenFheBinEmitter::getSubviewArgs(T op) {
   SmallVector<std::string> offsets =
       getStaticDynamicArgs(op.getOffsets(), op.getStaticOffsets());
@@ -597,16 +593,17 @@ LogicalResult OpenFheBinEmitter::printOperation(memref::CopyOp copy) {
     dest = variableNames->getNameForValue(copy.getTarget());
   } else {
     dest = llvm::formatv("vector_view<{}>({})",
-                         convertType(copy.getTarget().getType()),
+                         convertType(copy.getTarget().getType(), copy.getLoc()),
                          variableNames->getNameForValue(copy.getTarget()));
   }
 
   if (copy.getSource().getDefiningOp<memref::SubViewOp>()) {
     source = variableNames->getNameForValue(copy.getSource());
   } else {
-    source = llvm::formatv("vector_view<{}>({})",
-                           convertType(copy.getSource().getType()),
-                           variableNames->getNameForValue(copy.getSource()));
+    source =
+        llvm::formatv("vector_view<{}>({})",
+                      convertType(copy.getSource().getType(), copy->getLoc()),
+                      variableNames->getNameForValue(copy.getSource()));
   }
 
   os << llvm::formatv("copy({}, {});\n", dest, source);
@@ -634,7 +631,7 @@ LogicalResult OpenFheBinEmitter::printOperation(
   if (castOp.getSource().getType().getRank() >
       mlir::cast<BaseMemRefType>(castOp->getResult(0).getType()).getRank()) {
     std::string args = getSubviewArgs(castOp);
-    os << convertType(castOp->getResult(0).getType()) << " "
+    os << convertType(castOp->getResult(0).getType(), castOp->getLoc()) << " "
        << variableNames->getNameForValue(castOp->getResult(0)) << ";\n";
 
     os << llvm::formatv(
@@ -646,7 +643,9 @@ LogicalResult OpenFheBinEmitter::printOperation(
     auto destinationShape =
         mlir::cast<BaseMemRefType>(castOp->getResult(0).getType()).getShape();
     os << "unflatten<"
-       << convertType(castOp.getSource().getType().getElementType()) << ", "
+       << convertType(castOp.getSource().getType().getElementType(),
+                      castOp.getLoc())
+       << ", "
        << std::accumulate(std::next(destinationShape.begin()),
                           destinationShape.end(),
                           std::to_string(destinationShape[0]),
@@ -660,8 +659,9 @@ LogicalResult OpenFheBinEmitter::printOperation(
 
 LogicalResult OpenFheBinEmitter::printOperation(
     memref::CollapseShapeOp collapseOp) {
-  os << convertType(collapseOp->getResult(0).getType()) << " "
-     << variableNames->getNameForValue(collapseOp->getResult(0)) << ";\n";
+  os << convertType(collapseOp->getResult(0).getType(), collapseOp->getLoc())
+     << " " << variableNames->getNameForValue(collapseOp->getResult(0))
+     << ";\n";
   std::string sourceName =
       variableNames->getNameForValue(collapseOp.getViewSource());
   os << llvm::formatv("vector_view<decltype({})>({}).flatten({});\n",
@@ -681,13 +681,13 @@ LogicalResult OpenFheBinEmitter::printOperation(
 LogicalResult OpenFheBinEmitter::printOperation(openfhe::LWEMulConstOp mul) {
   return printInPlaceEvalMethod(mul.getResult(), mul.getCryptoContext(),
                                 {mul.getCiphertext(), mul.getConstant()},
-                                "EvalMultConstEq");
+                                "EvalMultConstEq", mul->getLoc());
 }
 
 LogicalResult OpenFheBinEmitter::printOperation(openfhe::LWEAddOp add) {
   return printInPlaceEvalMethod(add.getResult(), add.getCryptoContext(),
                                 {add.getOperand(1), add.getOperand(2)},
-                                "EvalAddEq");
+                                "EvalAddEq", add->getLoc());
 }
 
 LogicalResult OpenFheBinEmitter::printOperation(openfhe::MakeLutOp makeLut) {
@@ -714,7 +714,7 @@ LogicalResult OpenFheBinEmitter::printOperation(openfhe::EvalFuncOp evalFunc) {
 }
 
 LogicalResult OpenFheBinEmitter::printOperation(scf::IfOp ifOp) {
-  if (failed(emitType(ifOp->getResultTypes().front()))) {
+  if (failed(emitType(ifOp->getResultTypes().front(), ifOp->getLoc()))) {
     return failure();
   }
 
@@ -762,7 +762,7 @@ LogicalResult OpenFheBinEmitter::printOperation(affine::AffineForOp forOp) {
     return failure();
   }
   os << "for (";
-  if (failed(emitTypedAssignPrefix(forOp.getInductionVar()))) {
+  if (failed(emitTypedAssignPrefix(forOp.getInductionVar(), forOp->getLoc()))) {
     return failure();
   };
   os << forOp.getConstantLowerBound() << "; ";
@@ -782,8 +782,8 @@ LogicalResult OpenFheBinEmitter::printOperation(affine::AffineForOp forOp) {
 
 LogicalResult OpenFheBinEmitter::printInPlaceEvalMethod(
     mlir::Value result, mlir::Value cryptoContext, mlir::ValueRange operands,
-    std::string_view op) {
-  if (failed(emitTypedAssignPrefix(result))) {
+    std::string_view op, Location loc) {
+  if (failed(emitTypedAssignPrefix(result, loc))) {
     return failure();
   }
   os << "copy(" << variableNames->getNameForValue(*operands.begin()) << ");\n";

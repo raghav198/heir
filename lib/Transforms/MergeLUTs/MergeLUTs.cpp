@@ -1,14 +1,14 @@
 #include "lib/Transforms/MergeLUTs/MergeLUTs.h"
 
 #include "lib/Dialect/Comb/IR/CombOps.h"
-#include "lib/Graph/Graph.h"
 #include "lib/Transforms/MergeLUTs/LutMergingUtils.h"
 #include "lib/Transforms/MergeLUTs/SynthesizeArithmeticLut.h"
+#include "lib/Utils/Graph/Graph.h"
 #include "llvm/include/llvm/Support/Debug.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // IWYU pragma: keep // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinAttributes.h"
-#include "mlir/include/mlir/Pass/PassOptions.h"            // from @llvm-project
+#include "mlir/include/mlir/Pass/PassOptions.h"  // from @llvm-project
 
 #define DEBUG_TYPE "merge-luts"
 
@@ -29,9 +29,9 @@ static int getCost(mlir::Operation *producer,
     // TODO: refactor this (shares some code with
     // LutMergingUtils.cpp:mergeLutsIfPossible)
     std::set<mlir::Operation *> mergedInputs;
-    for (auto input : producerTable.getLookupTableInputs())
+    for (auto input : *producerTable.getLookupTableInputs())
       mergedInputs.insert(input.getDefiningOp());
-    for (auto input : consumerTable.getLookupTableInputs()) {
+    for (auto input : *consumerTable.getLookupTableInputs()) {
       if (input.getDefiningOp<comb::TruthTableOp>() != producerTable)
         mergedInputs.insert(input.getDefiningOp());
     }
@@ -154,10 +154,9 @@ struct MergeLUTs : public impl::MergeLUTsBase<MergeLUTs> {
                    << "Try merge " << *lutToMerge << " to " << *user << "\n");
         auto result = mergeLutsIfPossible(
             llvm::cast<comb::TruthTableOp>(user),
-            llvm::cast<comb::TruthTableOp>(lutToMerge),
-            builder, solverTimeout,
-            solverMaxFailures_, solverMaxBranches_,
-            solverMaxTime_, solverSolutions_);
+            llvm::cast<comb::TruthTableOp>(lutToMerge), builder, solverTimeout,
+            solverMaxFailures_, solverMaxBranches_, solverMaxTime_,
+            solverSolutions_);
         // update solver statistics
         solverMaxFailures = solverMaxFailures_;
         solverMaxBranches = solverMaxBranches_;
@@ -180,7 +179,8 @@ struct MergeLUTs : public impl::MergeLUTsBase<MergeLUTs> {
         // llvm::dbgs()
         //     << "Merging "
         //     << llvm::cast<comb::TruthTableOp>(lutToMerge).getLookupTable()
-        //     << " into " << llvm::cast<comb::TruthTableOp>(user).getLookupTable()
+        //     << " into " <<
+        //     llvm::cast<comb::TruthTableOp>(user).getLookupTable()
         //     << " to yield " << result.lookupTable << "\n";
         // llvm::dbgs() << "--(merging " << lutToMerge->getResult(0) << " into "
         //              << user->getResult(0) << ")--\n";

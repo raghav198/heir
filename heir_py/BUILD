@@ -34,9 +34,9 @@ py_library(
     ),
     data = DATA_DEPS,
     deps = [
-        "@heir_py_pip_deps_numba//:pkg",
-        "@heir_py_pip_deps_pybind11//:pkg",
-        "@heir_py_pip_deps_pybind11_global//:pkg",
+        "@heir_py_pip_deps//numba",
+        "@heir_py_pip_deps//pybind11",
+        "@heir_py_pip_deps//pybind11_global",
     ],
 )
 

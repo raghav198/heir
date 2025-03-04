@@ -5,16 +5,16 @@
 #include "lib/Dialect/Openfhe/IR/OpenfheDialect.h"
 #include "lib/Target/OpenFhePke/OpenFhePkeTemplates.h"
 #include "lib/Target/OpenFhePke/OpenFheUtils.h"
-#include "lib/Target/Utils.h"
-#include "llvm/include/llvm/ADT/TypeSwitch.h"           // from @llvm-project
-#include "llvm/include/llvm/Support/FormatVariadic.h"   // from @llvm-project
-#include "llvm/include/llvm/Support/raw_ostream.h"      // from @llvm-project
+#include "lib/Utils/TargetUtils.h"
+#include "llvm/include/llvm/ADT/TypeSwitch.h"          // from @llvm-project
+#include "llvm/include/llvm/Support/FormatVariadic.h"  // from @llvm-project
+#include "llvm/include/llvm/Support/raw_ostream.h"     // from @llvm-project
+#include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"   // from @llvm-project
-#include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h" // from @llvm-project
 #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/include/mlir/Dialect/SCF/IR/SCF.h"       // from @llvm-project
 #include "mlir/include/mlir/Dialect/Polynomial/IR/PolynomialDialect.h"  // from @llvm-project
+#include "mlir/include/mlir/Dialect/SCF/IR/SCF.h"     // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinAttributes.h"   // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinOps.h"          // from @llvm-project
 #include "mlir/include/mlir/IR/DialectRegistry.h"     // from @llvm-project
@@ -31,15 +31,17 @@ namespace heir {
 namespace openfhe {
 
 std::string prelude = R"cpp(
-#include <openfhe.h> // from @openfhe
+#include <openfhe.h>  // from @openfhe
 
-using namespace lbcrypto;
+  using namespace lbcrypto;
 
-using BinFHEContextT = std::shared_ptr<BinFHEContext>;
-using LWESchemeT = std::shared_ptr<LWEEncryptionScheme>;
+  using BinFHEContextT = std::shared_ptr<BinFHEContext>;
+  using LWESchemeT = std::shared_ptr<LWEEncryptionScheme>;
 
-std::vector<LWECiphertext> encrypt(BinFHEContextT cc, LWEPrivateKey sk, int value, int width = 8);
-int decrypt(BinFHEContextT cc, LWEPrivateKey sk, std::vector<LWECiphertext> encrypted);
+  std::vector<LWECiphertext> encrypt(BinFHEContextT cc, LWEPrivateKey sk,
+                                     int value, int width = 8);
+  int decrypt(BinFHEContextT cc, LWEPrivateKey sk,
+              std::vector<LWECiphertext> encrypted);
 )cpp";
 
 void registerToOpenFheBinHeaderTranslation() {
@@ -53,8 +55,8 @@ void registerToOpenFheBinHeaderTranslation() {
       [](DialectRegistry &registry) {
         registry.insert<arith::ArithDialect, func::FuncDialect,
                         openfhe::OpenfheDialect, lwe::LWEDialect,
-                        ::mlir::polynomial::PolynomialDialect, scf::SCFDialect, memref::MemRefDialect,
-                        affine::AffineDialect>();
+                        ::mlir::polynomial::PolynomialDialect, scf::SCFDialect,
+                        memref::MemRefDialect, affine::AffineDialect>();
       });
 }
 
@@ -102,20 +104,20 @@ LogicalResult OpenFheBinHeaderEmitter::printOperation(func::FuncOp funcOp) {
   }
 
   Type result = funcOp.getResultTypes()[0];
-  if (failed(emitType(result))) {
+  if (failed(emitType(result, funcOp->getLoc()))) {
     return funcOp.emitOpError() << "Failed to emit type " << result;
   }
 
   os << " " << funcOp.getName() << "(";
 
   for (Value arg : funcOp.getArguments()) {
-    if (failed(convertType(arg.getType()))) {
+    if (failed(convertType(arg.getType(), funcOp.getLoc()))) {
       return funcOp.emitOpError() << "Failed to emit type " << arg.getType();
     }
   }
 
   os << commaSeparatedValues(funcOp.getArguments(), [&](Value value) {
-    auto res = convertType(value.getType());
+    auto res = convertType(value.getType(), funcOp.getLoc());
     return res.value() + " " + variableNames->getNameForValue(value);
   });
   os << ");\n";
@@ -123,8 +125,8 @@ LogicalResult OpenFheBinHeaderEmitter::printOperation(func::FuncOp funcOp) {
   return success();
 }
 
-LogicalResult OpenFheBinHeaderEmitter::emitType(Type type) {
-  auto result = convertType(type);
+LogicalResult OpenFheBinHeaderEmitter::emitType(Type type, Location loc) {
+  auto result = convertType(type, loc);
   if (failed(result)) {
     return failure();
   }

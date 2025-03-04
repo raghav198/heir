@@ -3,22 +3,22 @@
 #include <memory>
 #include <string>
 
-#include "lib/Conversion/BGVToOpenfhe/BGVToOpenfhe.h"
-#include "lib/Conversion/CGGIToJaxite/CGGIToJaxite.h"
+// #include "lib/Conversion/BGVToOpenfhe/BGVToOpenfhe.h"
+// #include "lib/Conversion/CGGIToJaxite/CGGIToJaxite.h"
 // #include "lib/Conversion/BGVToPolynomial/BGVToPolynomial.h"
 #include "lib/Conversion/CGGIToOpenfhe/CGGIToOpenfhe.h"
-#include "lib/Conversion/CGGIToTfheRust/CGGIToTfheRust.h"
-#include "lib/Conversion/CGGIToTfheRustBool/CGGIToTfheRustBool.h"
-#include "lib/Conversion/CKKSToOpenfhe/CKKSToOpenfhe.h"
-#include "lib/Conversion/CombToCGGI/CombToCGGI.h"
-#include "lib/Conversion/LWEToPolynomial/LWEToPolynomial.h"
-#include "lib/Conversion/LinalgToTensorExt/LinalgToTensorExt.h"
-#include "lib/Conversion/MemrefToArith/MemrefToArith.h"
-#include "lib/Conversion/ModArithToArith/ModArithToArith.h"
-#include "lib/Conversion/PolynomialToStandard/PolynomialToStandard.h"
-#include "lib/Conversion/SecretToBGV/SecretToBGV.h"
-#include "lib/Conversion/SecretToCKKS/SecretToCKKS.h"
-#include "lib/Conversion/TosaToSecretArith/TosaToSecretArith.h"
+// #include "lib/Conversion/CGGIToTfheRust/CGGIToTfheRust.h"
+// #include "lib/Conversion/CGGIToTfheRustBool/CGGIToTfheRustBool.h"
+// #include "lib/Conversion/CKKSToOpenfhe/CKKSToOpenfhe.h"
+// #include "lib/Conversion/CombToCGGI/CombToCGGI.h"
+// #include "lib/Conversion/LWEToPolynomial/LWEToPolynomial.h"
+// #include "lib/Conversion/LinalgToTensorExt/LinalgToTensorExt.h"
+// #include "lib/Conversion/MemrefToArith/MemrefToArith.h"
+// #include "lib/Conversion/ModArithToArith/ModArithToArith.h"
+// #include "lib/Conversion/PolynomialToStandard/PolynomialToStandard.h"
+// #include "lib/Conversion/SecretToBGV/SecretToBGV.h"
+// #include "lib/Conversion/SecretToCKKS/SecretToCKKS.h"
+// #include "lib/Conversion/TosaToSecretArith/TosaToSecretArith.h"
 #include "lib/Dialect/Arith/Conversions/ArithToCGGI/ArithToCGGI.h"
 #include "lib/Dialect/Arith/Conversions/ArithToCGGIQuart/ArithToCGGIQuart.h"
 #include "lib/Dialect/Arith/Conversions/ArithToModArith/ArithToModArith.h"
@@ -331,10 +331,12 @@ int main(int argc, char **argv) {
   // When running in a lit test, these #defines must be overridden
   // by environment variables set in tests/lit.cfg.py
   char *overriddenAbcEnvPath = std::getenv("HEIR_ABC_BINARY");
-  char *overriddenYosysRunfilesEnvPath = std::getenv("HEIR_YOSYS_SCRIPTS_DIR");
+  // char *overriddenYosysRunfilesEnvPath =
+  // std::getenv("HEIR_YOSYS_SCRIPTS_DIR");
   if (overriddenAbcEnvPath != nullptr) abcEnvPath = overriddenAbcEnvPath;
-  if (overriddenYosysRunfilesEnvPath != nullptr)
-    yosysRunfilesEnvPath = overriddenYosysRunfilesEnvPath;
+  // TODO: put these back once the _main/... issue is fixed
+  // if (overriddenYosysRunfilesEnvPath != nullptr)
+  //   yosysRunfilesEnvPath = overriddenYosysRunfilesEnvPath;
   mlir::heir::registerYosysOptimizerPipeline(yosysRunfilesEnvPath, abcEnvPath);
   registerTosaToBooleanTfhePipeline(yosysRunfilesEnvPath, abcEnvPath);
   registerTosaToBooleanFpgaTfhePipeline(yosysRunfilesEnvPath, abcEnvPath);

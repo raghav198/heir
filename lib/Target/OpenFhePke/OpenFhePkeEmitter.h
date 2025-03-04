@@ -37,7 +37,7 @@ class OpenFhePkeEmitter {
 
   virtual LogicalResult translate(::mlir::Operation &operation);
 
- private:
+ protected:
   OpenfheImportType importType_;
 
   /// Output stream to emit to.
@@ -108,7 +108,8 @@ class OpenFhePkeEmitter {
                                 std::string_view op);
 
   LogicalResult printBinaryOp(::mlir::Value result, ::mlir::Value lhs,
-                              ::mlir::Value rhs, const std::string &op);
+                              ::mlir::Value rhs, const std::string &op,
+                              Location loc);
 
   // Emit an OpenFhe type
   LogicalResult emitType(::mlir::Type type, ::mlir::Location loc);

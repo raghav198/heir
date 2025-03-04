@@ -43,7 +43,7 @@ class OpenFheBinHeaderEmitter {
   LogicalResult printOperation(::mlir::func::FuncOp op);
 
   // Emit an OpenFhe type
-  LogicalResult emitType(Type type);
+  LogicalResult emitType(Type type, Location loc);
 };
 
 }  // namespace openfhe
