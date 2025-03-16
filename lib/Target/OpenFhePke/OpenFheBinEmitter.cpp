@@ -555,10 +555,10 @@ SmallVector<std::string> OpenFheBinEmitter::getStaticDynamicArgs(
 
 template <
     class T,
-    typename = typename std::enable_if_t<
+    std::enable_if_t<
         std::disjunction<std::is_same<T, memref::SubViewOp>,
                          std::is_same<T, memref::ReinterpretCastOp>>::value,
-        bool>>
+        bool> = true>
 std::string OpenFheBinEmitter::getSubviewArgs(T op) {
   SmallVector<std::string> offsets =
       getStaticDynamicArgs(op.getOffsets(), op.getStaticOffsets());

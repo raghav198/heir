@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 exec &> >(tee "run-evaluation.log")
 
-BENCHMARKPATH="/local/scratch/a/paranjav/coyote-project/paper/heir/benchmarks/"
+BENCHMARKPATH="./benchmarks/"
 
 set -e 
 if ! [ -x "$(command -v numactl)" ]; then
@@ -22,7 +22,7 @@ do
 	do
 		bmk=$(basename "$benchmark")
 		echo "==== Lowering benchmark -> ${su}:${bmk} ===="
-		python3 scripts/templates/benchmark.py compile_benchmark /local/scratch/a/paranjav/coyote-project/paper/heir/benchmarks/$su/ $bmk
+		python3 scripts/templates/benchmark.py compile_benchmark ./benchmarks/$su/ $bmk
 	done
 done
 
