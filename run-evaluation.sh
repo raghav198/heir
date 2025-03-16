@@ -54,9 +54,9 @@ do
 		echo "==== Running benchmark -> ${su}:${bmk} ===="
 		mkdir -p $benchmark/results
 		echo "== Running unoptimized =="
-		numactl --physcpubind=0 --membind=0 $benchmark/build/$bmk.unopt | tee $benchmark/results/$bmk.unopt.log
+		numactl --physcpubind=0 $benchmark/build/$bmk.unopt | tee $benchmark/results/$bmk.unopt.log
 		echo "== Running optimized =="
-		numactl --physcpubind=0 --membind=0 $benchmark/build/$bmk.opt | tee $benchmark/results/$bmk.opt.log
+		numactl --physcpubind=0 $benchmark/build/$bmk.opt | tee $benchmark/results/$bmk.opt.log
 	done
 done
 
