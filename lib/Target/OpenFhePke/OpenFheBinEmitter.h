@@ -62,7 +62,7 @@ class OpenFheBinEmitter : public OpenFhePkeEmitter {
   SmallVector<std::string> getStaticDynamicArgs(
       SmallVector<mlir::Value> dynamicArgs, ArrayRef<int64_t> staticArgs);
 
-  template <class T, std::enable_if_t<std::disjunction<
+  template <class T, typename = std::enable_if_t<std::disjunction<
                          std::is_same<T, memref::SubViewOp>,
                          std::is_same<T, memref::ReinterpretCastOp>>::value, bool>>
   std::string getSubviewArgs(T op);
