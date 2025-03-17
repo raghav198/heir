@@ -1,7 +1,37 @@
 #!/usr/bin/env bash
-exec &> >(tee "run-evaluation.log")
 
-BENCHMARKPATH="./benchmarks/"
+usage() {
+  echo "Usage: $0 [small|medium|large|all]"
+  echo "  small  - Run benchmarks in ./benchmarks-small/"
+  echo "  medium - Run benchmarks in ./benchmarks-medium/"
+  echo "  large  - Run benchmarks in ./benchmarks-large/"
+  echo "  all    - Run all benchmarks in ./benchmarks-all/"
+  echo "  --help  - Show this help message and exit"
+  exit 1
+}
+
+if [ -z "$1" ]; then
+  echo "Error: No option provided."
+  usage
+fi
+
+if [ "$#" -ne 1 ]; then
+  usage
+fi
+
+case "$1" in
+  small) BENCHMARKPATH="./benchmarks-small" ;;
+  medium) BENCHMARKPATH="./benchmarks-medium" ;;
+  large) BENCHMARKPATH="./benchmarks-large" ;;
+  all) BENCHMARKPATH="./benchmarks-all" ;;
+  --help) usage ;;
+  *)
+  echo "Error: Invalid option '$1'"
+  usage
+  ;;
+esac
+
+exec &> >(tee "run-evaluation.log")
 
 set -e 
 if ! [ -x "$(command -v numactl)" ]; then
@@ -22,7 +52,7 @@ do
 	do
 		bmk=$(basename "$benchmark")
 		echo "==== Lowering benchmark -> ${su}:${bmk} ===="
-		python3 scripts/templates/benchmark.py compile_benchmark ./benchmarks/$su/ $bmk
+		python3 scripts/templates/benchmark.py compile_benchmark $BENCHMARKPATH/$su/ $bmk
 	done
 done
 
