@@ -105,6 +105,11 @@ mlir::FailureOr<ArithmeticLut> ArithmeticLutSynthesizer::doSynth(mlir::IntegerAt
         llvm::dbgs() << "\tValues: " << tableValues << "\n";
     });
 
+    if (arity >= 8) {
+        LLVM_DEBUG(llvm::dbgs() << "\tFAILURE\n");
+        return mlir::failure();
+    }
+
     operations_research::Solver solver("solver");
     auto *timeLimit = solver.MakeTimeLimit(absl::Milliseconds(solverTimeout));
     coefficientVars.reserve(arity);
