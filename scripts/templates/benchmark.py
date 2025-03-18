@@ -117,6 +117,7 @@ class CLI:
             "cggi-canonicalize-luts",
             "cse",
             "cggi-to-openfhe",
+            "mlir-timing"
         ]
 
         unoptimized_pipeline = [
@@ -152,11 +153,13 @@ class CLI:
 
         start = time.time()
         print(f"Compiling {benchmark_name}.opt...", end="", flush=True)
-        opt_compiled = try_run(
+        opt_compiled_std = try_run(
             f"Compilation of {benchmark_name}.opt",
             get_bazel_args("heir-opt", optimized_pipeline, benchmark_root)
-        ).stdout
-        
+        )
+        opt_compiled = opt_compiled_std.stdout
+        print(opt_compiled_std.stderr.decode())
+
         print("codegen...", end="", flush=True)
         opt_codegen = try_run(
             f"Codegen of {benchmark_name}.opt",

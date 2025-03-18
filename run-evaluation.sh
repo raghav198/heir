@@ -44,7 +44,7 @@ if ! [ -x "$(command -v tee)" ]; then
   exit 1
 fi
 
-echo "====== [1/4] Lowering MLIR benchmarks to FHE Code ======"
+echo "====== [1/6] Lowering MLIR benchmarks to FHE Code ======"
 for suite in $BENCHMARKPATH/*/
 do	
 	su=$(basename "$suite")
@@ -56,7 +56,7 @@ do
 	done
 done
 
-echo "====== [2/4] Compiling FHE Code to Binary ======"
+echo "====== [2/6] Compiling FHE Code to Binary ======"
 for suite in $BENCHMARKPATH/*/
 do	
 	su=$(basename "$suite")
@@ -74,7 +74,7 @@ do
 	done
 done
 
-echo "====== [3/4] Running FHE Binaries ======"
+echo "====== [3/6] Running FHE Binaries ======"
 for suite in $BENCHMARKPATH/*/
 do	
 	su=$(basename "$suite")
@@ -90,7 +90,7 @@ do
 	done
 done
 
-echo "====== [4/4] Generating FHE Run Results ======"
+echo "====== [4/6] Generating FHE Run Results ======"
 touch $BENCHMARKPATH/results.csv
 cat /dev/null > $BENCHMARKPATH/results.csv
 echo -e "Benchmark;Run 1;Run 2;Run 3;Run 4;Run 5;Run 6;Run 7;Run 8;Run 9;Run 10;Run 11;Run 12;Run 13;Run 14;Run 15;Run 16;Run 17;Run 18;Run 19;Run 20;Run 21;Run 22;Run 23;Run 24;Run 25;Run 26;Run 27;Run 28;Run 29;Run 30" >> $BENCHMARKPATH/results.csv
@@ -107,3 +107,29 @@ do
 		echo -e "$bmk.opt;$(cat $benchmark/results/$bmk.opt.log)" >> $BENCHMARKPATH/results.csv
 	done
 done
+
+echo "====== [5/6] Parsing MLIR generated code to get gate count ======"
+touch ./results/gatecount-table2.csv
+cat /dev/null > ./results/gatecount-table2.csv
+echo -e "benchmark,unoptgates,optgates" >> ./results/gatecount-table2.csv
+for suite in $BENCHMARKPATH/*/
+do	
+	su=$(basename "$suite")
+	for benchmark in $BENCHMARKPATH/$su/*/
+	do
+		bmk=$(basename "$benchmark")
+		echo "==== Parsing benchmark results -> ${su}:${bmk} ===="
+        unopt_gate=`cat $benchmark/IR/unopt.mlir | grep eval_func | wc -l`
+        opt_gate=`cat $benchmark/IR/opt.mlir | grep eval_func | wc -l`
+
+        echo -e "${bmk},${unopt_gate},${opt_gate}" >> ./results/gatecount-table2.csv
+	done
+done
+
+echo "====== [6/6] Parsing runtime logs to generate tables and plots ======"
+echo "==== Generating speedup figures ===="
+python3 plot-speedup.py $BENCHMARKPATH/results.csv
+echo "==== Generating speedup tables ===="
+python3 table-speedup.py $BENCHMARKPATH/results.csv
+echo "==== Generating compiletime statistics tables ===="
+python3 table-compiletime.py ./run-evaluation.log
