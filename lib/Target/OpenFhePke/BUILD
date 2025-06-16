@@ -152,6 +152,7 @@ cc_library(
         "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:SCFDialect",
+        "@heir//lib/Dialect/Comb/IR:Dialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:PolynomialDialect",
         "@llvm-project//mlir:Support",

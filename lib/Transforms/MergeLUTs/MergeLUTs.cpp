@@ -29,9 +29,11 @@ static int getCost(mlir::Operation *producer,
     // TODO: refactor this (shares some code with
     // LutMergingUtils.cpp:mergeLutsIfPossible)
     std::set<mlir::Operation *> mergedInputs;
-    for (auto input : *producerTable.getLookupTableInputs())
+    auto producerInputs = *producerTable.getLookupTableInputs();
+    for (auto input : producerInputs)
       mergedInputs.insert(input.getDefiningOp());
-    for (auto input : *consumerTable.getLookupTableInputs()) {
+    auto consumerInputs = *consumerTable.getLookupTableInputs();
+    for (auto input : consumerInputs) {
       if (input.getDefiningOp<comb::TruthTableOp>() != producerTable)
         mergedInputs.insert(input.getDefiningOp());
     }
@@ -52,6 +54,8 @@ static mlir::Operation *nextLutToMerge(
   // Return the vertex with the minimum non-zero out-degree, or nullptr if no
   // such vertex exists
   lutGraph = makeLUTGraph(root);
+  LLVM_DEBUG(llvm::dbgs() << lutGraph.getVertices().size()
+                          << " nodes remain\n");
   mlir::Operation *next = nullptr;
   int outDegree = lutGraph.getVertices()
                       .size();  // larger than the maximum possible out degree
@@ -112,6 +116,11 @@ static void executeMerge(mlir::Operation *user,
   auto [userInputs, lookupTable, synthesisResult] = mergeResult;
 
   builder.setInsertionPointAfter(user);
+  llvm::dbgs() << "Building at location: " << user->getLoc() << "\n";
+  llvm::dbgs() << "Inputs are: " << userInputs.size() << "\n";
+  for (const auto &inp : userInputs) llvm::dbgs() << inp << "\n";
+  llvm::dbgs() << "\n";
+  llvm::dbgs() << "Lookup table is: " << lookupTable << "\n";
   auto lookupTableOp = builder.create<comb::TruthTableOp>(
       user->getLoc(), userInputs, lookupTable);
 
@@ -163,8 +172,14 @@ struct MergeLUTs : public impl::MergeLUTsBase<MergeLUTs> {
         solverMaxTime = solverMaxTime_;
         solverSolutions = solverSolutions_;
 
-        if (mlir::succeeded(result))
+        if (mlir::succeeded(result)) {
+          auto [userInputs, _, __] = *result;
+          llvm::dbgs() << "Dump pre:\n";
+          for (auto &inp : userInputs) llvm::dbgs() << inp << "\n";
+          llvm::dbgs() << "--\n";
           mergeResults.insert({user, *result});
+        }
+
         else
           LLVM_DEBUG(llvm::dbgs() << "Merge " << *lutToMerge << " to " << *user
                                   << " failed\n");
@@ -175,6 +190,7 @@ struct MergeLUTs : public impl::MergeLUTsBase<MergeLUTs> {
                  << " edges, " << mergeResults.size() << " succeeded\n");
       if (mergeResults.size() != lutGraph.edgesOutOf(lutToMerge).size())
         continue;
+      llvm::dbgs() << "GOING FOR MERGE\n";
       for (auto &[user, result] : mergeResults) {
         // llvm::dbgs()
         //     << "Merging "
@@ -182,8 +198,13 @@ struct MergeLUTs : public impl::MergeLUTsBase<MergeLUTs> {
         //     << " into " <<
         //     llvm::cast<comb::TruthTableOp>(user).getLookupTable()
         //     << " to yield " << result.lookupTable << "\n";
-        // llvm::dbgs() << "--(merging " << lutToMerge->getResult(0) << " into "
-        //              << user->getResult(0) << ")--\n";
+        llvm::dbgs() << "--(merging " << lutToMerge->getResult(0) << " into "
+                     << user->getResult(0) << ")--\n";
+        llvm::dbgs() << getOperation() << "\n";
+        llvm::dbgs() << "Dump outside:\n";
+        auto [userInputs, _, __] = result;
+        for (auto &inp : userInputs) llvm::dbgs() << inp << "\n";
+        llvm::dbgs() << "--\n";
         executeMerge(user, result, builder);
         user->erase();
       }

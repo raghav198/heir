@@ -3,6 +3,8 @@
 #include <numeric>
 
 #include "lib/Analysis/SelectVariableNames/SelectVariableNames.h"
+#include "lib/Dialect/Comb/IR/CombDialect.h"
+#include "lib/Dialect/Comb/IR/CombOps.h"
 #include "lib/Dialect/LWE/IR/LWEDialect.h"
 #include "lib/Dialect/LWE/IR/LWEOps.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheDialect.h"
@@ -382,7 +384,8 @@ void registerToOpenFheBinTranslation() {
       [](DialectRegistry &registry) {
         registry.insert<arith::ArithDialect, func::FuncDialect, lwe::LWEDialect,
                         openfhe::OpenfheDialect, memref::MemRefDialect,
-                        scf::SCFDialect, affine::AffineDialect>();
+                        scf::SCFDialect, affine::AffineDialect,
+                        comb::CombDialect>();
       });
 }
 
@@ -426,6 +429,7 @@ LogicalResult OpenFheBinEmitter::translate(Operation &operation) {
           .Case<scf::IfOp>([&](auto ifOp) { return printOperation(ifOp); })
           .Case<affine::AffineForOp>(
               [&](auto forOp) { return printOperation(forOp); })
+          .Case<comb::InvOp>([&](auto invOp) { return printOperation(invOp); })
           .Default([&](auto &op) {
             return OpenFhePkeEmitter::translate(operation);
           });
@@ -537,6 +541,12 @@ LogicalResult OpenFheBinEmitter::printOperation(
     return success();
   }
   return failure();
+}
+
+LogicalResult OpenFheBinEmitter::printOperation(comb::InvOp op) {
+  emitAutoAssignPrefix(op.getResult());
+  os << "!" << variableNames->getNameForValue(op.getInput());
+  return success();
 }
 
 SmallVector<std::string> OpenFheBinEmitter::getStaticDynamicArgs(

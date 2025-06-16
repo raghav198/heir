@@ -2,24 +2,28 @@
 #define LIB_TARGET_OPENFHEBIN_OPENFHEBINEMITTER_H_
 
 #include "lib/Analysis/SelectVariableNames/SelectVariableNames.h"
+#include "lib/Dialect/Comb/IR/CombOps.h"
 #include "lib/Dialect/LWE/IR/LWEOps.h"
 #include "lib/Dialect/Openfhe/IR/OpenfheOps.h"
 #include "lib/Target/OpenFhePke/OpenFhePkeEmitter.h"
 #include "lib/Target/OpenFhePke/OpenFheUtils.h"
 #include "llvm/include/llvm/Support/raw_ostream.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"    // from @llvm-project
-#include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"   // from @llvm-project
+// #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"    // from
+// @llvm-project #include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"   //
+// from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/SCF/IR/SCF.h"        // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinOps.h"             // from @llvm-project
 #include "mlir/include/mlir/IR/Operation.h"              // from @llvm-project
-#include "mlir/include/mlir/IR/Types.h"                  // from @llvm-project
-#include "mlir/include/mlir/IR/Value.h"                  // from @llvm-project
-#include "mlir/include/mlir/IR/ValueRange.h"             // from @llvm-project
-#include "mlir/include/mlir/Support/IndentedOstream.h"   // from @llvm-project
-#include "mlir/include/mlir/Support/LLVM.h"              // from @llvm-project
-#include "mlir/include/mlir/Support/LogicalResult.h"     // from @llvm-project
+// #include "mlir/include/mlir/IR/Types.h"                  // from
+// @llvm-project
+#include "mlir/include/mlir/IR/Value.h"       // from @llvm-project
+#include "mlir/include/mlir/IR/ValueRange.h"  // from @llvm-project
+// #include "mlir/include/mlir/Support/IndentedOstream.h"   // from
+// @llvm-project
+#include "mlir/include/mlir/Support/LLVM.h"           // from @llvm-project
+#include "mlir/include/mlir/Support/LogicalResult.h"  // from @llvm-project
 
 namespace mlir::heir::openfhe {
 
@@ -48,6 +52,8 @@ class OpenFheBinEmitter : public OpenFhePkeEmitter {
 
   LogicalResult printOperation(lwe::EncodeOp encode);
   LogicalResult printOperation(lwe::TrivialEncryptOp trivialEncrypt);
+
+  LogicalResult printOperation(comb::InvOp op);
 
   // some of the control flow ops
   LogicalResult printOperation(scf::IfOp ifOp);

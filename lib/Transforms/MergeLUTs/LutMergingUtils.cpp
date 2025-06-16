@@ -158,10 +158,12 @@ mlir::APInt getMergedLookupTable(comb::TruthTableOp user,
   mlir::SmallVector<int> sourceIdxs;
   mlir::SmallVector<int> destIdxs;
 
-  for (auto sourceInput : *lutToMerge.getLookupTableInputs())
+  auto lutToMergeInputs = *lutToMerge.getLookupTableInputs();
+  for (auto sourceInput : lutToMergeInputs)
     sourceIdxs.push_back(inputIndices[sourceInput]);
 
-  for (auto destInput : *user.getLookupTableInputs()) {
+  auto userLutInputs = *user.getLookupTableInputs();
+  for (auto destInput : userLutInputs) {
     if (inputIndices.contains(destInput))
       destIdxs.push_back(inputIndices[destInput]);
     else
@@ -181,14 +183,17 @@ mlir::FailureOr<LutMergeResult> mergeLutsIfPossible(
     uint64_t& solverMaxBranches, uint64_t& solverMaxTime,
     uint64_t& solverSolutions) {
   mlir::SetVector<Value> userInputs;
-  for (auto input : *user.getLookupTableInputs()) {
+  auto userLutInputs = *user.getLookupTableInputs();
+  for (auto input : userLutInputs) {
     if (input.getDefiningOp<comb::TruthTableOp>() == lutToMerge) {
-      for (auto sourceInput : *lutToMerge.getLookupTableInputs())
-        userInputs.insert(sourceInput);
+      auto lutToMergeInputs = *lutToMerge.getLookupTableInputs();
+      for (auto sourceInput : lutToMergeInputs) userInputs.insert(sourceInput);
       continue;
     }
     userInputs.insert(input);
   }
+
+  if (userInputs.size() > 7) return failure();
 
   mlir::APInt mergedLookupTable =
       getMergedLookupTable(user, lutToMerge, userInputs);
